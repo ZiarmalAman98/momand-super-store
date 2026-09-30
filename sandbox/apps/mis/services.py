@@ -7,7 +7,7 @@ from django.db.models import Q, Sum
 from django.utils import timezone
 from oscar.core.loading import get_model
 
-from .models import POSSale, POSSaleItem, POSSaleReturn, POSSaleReturnItem, Purchase, PurchaseItem, StockMovement
+from .models import PaymentTransaction, POSSale, POSSaleItem, POSSaleReturn, POSSaleReturnItem, Purchase, PurchaseItem, StockMovement
 
 Product = get_model("catalogue", "Product")
 StockRecord = get_model("partner", "StockRecord")
@@ -156,6 +156,17 @@ def create_pos_sale(*, cashier, items, payment_method, amount_tendered, customer
         subtotal=subtotal, tax=tax, total=total,
         payment_method=payment_method, amount_tendered=tendered, change_due=change,
     )
+    PaymentTransaction.objects.create(
+        transaction_ref=f"PAY-{sale.invoice_number}",
+        sale=sale,
+        method=payment_method,
+        status=PaymentTransaction.STATUS_PAID,
+        amount=total,
+        gateway="pos",
+        note="POS payment captured",
+        created_by=cashier,
+        paid_at=timezone.now(),
+    )
     for product, record, quantity, price, line_total in prepared:
         before = max(0, record.net_stock_level or 0)
         if record.num_in_stock is None or record.num_in_stock < (record.num_allocated or 0) + quantity:
@@ -242,6 +253,18 @@ def process_pos_return(*, invoice_number, processed_by, items, refund_method, re
                 reference=sale_return.invoice_number, note=f"Return against {sale.invoice_number}",
                 created_by=processed_by,
             )
+    PaymentTransaction.objects.create(
+        transaction_ref=f"REFUND-{sale_return.invoice_number}",
+        sale=sale,
+        method=refund_method,
+        status=PaymentTransaction.STATUS_REFUNDED,
+        amount=refund_total,
+        refunded_amount=refund_total,
+        gateway="pos-refund",
+        note=f"Refund for {sale.invoice_number}",
+        created_by=processed_by,
+        paid_at=timezone.now(),
+    )
     return sale_return
 
 
