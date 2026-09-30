@@ -8,7 +8,7 @@ export default function POSReturnsPage(){
  const {user,ready}=useAuth();const [invoice,setInvoice]=useState('');const [sale,setSale]=useState(null);const [quantities,setQuantities]=useState({});const [reason,setReason]=useState('');const [method,setMethod]=useState('cash');const [restock,setRestock]=useState(true);const [error,setError]=useState('');const [message,setMessage]=useState('');const [busy,setBusy]=useState(false)
  if(!ready)return <section className="site-container page-section"><div className="product-skeleton detail-skeleton"/></section>
  if(!user)return <Navigate to="/login" replace/>
- if(!user.is_staff)return <section className="site-container page-section"><div className="state-card"><strong>Staff access required.</strong></div></section>
+ if(!user.is_staff || !user.permission_codes?.includes('mis.add_possalereturn'))return <section className="site-container page-section"><div className="state-card"><strong>Access denied.</strong><p>Returns are restricted to authorised users.</p></div></section>
  const currency=sale?.currency||'AFN';const money=value=>new Intl.NumberFormat(undefined,{style:'currency',currency}).format(value||0)
  async function findSale(event){event.preventDefault();setError('');setMessage('');try{const result=await api.posSaleDetail(invoice.trim());setSale(result);setQuantities({})}catch(err){setSale(null);setError(err.message)}}
  const refund=sale?sale.items.reduce((sum,item)=>sum+(Number(item.unit_price)+Number(item.unit_tax))*Number(quantities[item.id]||0),0):0
