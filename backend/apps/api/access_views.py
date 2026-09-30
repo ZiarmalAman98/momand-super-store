@@ -37,7 +37,7 @@ PERMISSIONS = [
 ]
 
 MENU_RULES = {
-    "admin_panel": ("mis.view_possale", "mis.view_stockmovement", "mis.view_purchase", "mis.view_supplier", "mis.view_expense", "auth.view_user"),
+    "admin_panel": ("mis.view_stockmovement", "mis.view_purchase", "mis.view_supplier", "mis.view_expense", "auth.view_user"),
     "dashboard": ("mis.view_possale", "mis.view_purchase", "mis.view_expense", "mis.view_stockmovement"),
     "pos": ("mis.add_possale", "mis.view_possale"),
     "inventory": ("mis.view_stockmovement",),
@@ -137,6 +137,9 @@ class UserManagementView(APIView):
         user.save(update_fields=["is_staff", "is_active"])
         codes = {code for code, _ in PERMISSIONS}
         selected = [code for code in request.data.get("permissions", []) if code in codes]
+        if not request.user.is_superuser:
+            allowed = set(request.user.get_all_permissions())
+            selected = [code for code in selected if code in allowed]
         perms = Permission.objects.filter(content_type__app_label__in=("mis", "catalogue", "auth"), content_type__model__isnull=False, codename__in=[c.split(".", 1)[1] for c in selected])
         perms = [p for p in perms if f"{p.content_type.app_label}.{p.codename}" in selected]
         user.user_permissions.set(perms)
@@ -168,6 +171,9 @@ class UserManagementView(APIView):
         if "permissions" in request.data and not user.is_superuser:
             codes = {code for code, _ in PERMISSIONS}
             selected = [code for code in request.data.get("permissions", []) if code in codes]
+            if not request.user.is_superuser:
+                allowed = set(request.user.get_all_permissions())
+                selected = [code for code in selected if code in allowed]
             perms = Permission.objects.filter(content_type__app_label__in=("mis", "catalogue", "auth"), codename__in=[c.split(".", 1)[1] for c in selected])
             perms = [p for p in perms if f"{p.content_type.app_label}.{p.codename}" in selected]
             user.user_permissions.set(perms)
