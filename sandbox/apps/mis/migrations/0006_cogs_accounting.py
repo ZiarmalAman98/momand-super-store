@@ -77,7 +77,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name="onlineordercost",
-            index=models.Index(fields=["stockrecord", "created_at"], name="mis_online_cost_stock_created_idx"),
+            index=models.Index(fields=["stockrecord", "created_at"], name="mis_online_cost_stock_created"),
         ),
         migrations.AddConstraint(
             model_name="onlineordercost",
