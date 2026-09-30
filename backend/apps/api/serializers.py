@@ -10,7 +10,6 @@ from oscar.core.loading import get_model
 
 from apps.storefront.models import ContactMessage
 from apps.mis.models import CashierShift, Expense, PaymentTransaction, POSSale, POSSaleItem, POSSaleReturn, POSSaleReturnItem, Purchase, StockMovement, Supplier
-from apps.mis.sale_corrections import POSSaleCorrection, POSSaleCorrectionItem
 
 Category = get_model("catalogue", "Category")
 Product = get_model("catalogue", "Product")
@@ -274,31 +273,3 @@ class CashierShiftSerializer(serializers.ModelSerializer):
             "status", "note",
         )
         read_only_fields = ("id", "cashier", "cashier_name", "opened_at", "closed_at", "expected_cash", "cash_difference", "status")
-
-
-class POSSaleCorrectionItemSerializer(serializers.ModelSerializer):
-    title = serializers.CharField(source="sale_item.title", read_only=True)
-
-    class Meta:
-        model = POSSaleCorrectionItem
-        fields = ("title", "original_quantity", "corrected_quantity", "quantity_delta")
-
-
-class POSSaleCorrectionSerializer(serializers.ModelSerializer):
-    invoice_number = serializers.CharField(source="sale.invoice_number", read_only=True)
-    processed_by_name = serializers.CharField(source="processed_by.get_full_name", read_only=True)
-    items = POSSaleCorrectionItemSerializer(many=True, read_only=True)
-
-    class Meta:
-        model = POSSaleCorrection
-        fields = ("id", "invoice_number", "processed_by_name", "reason", "original_total", "corrected_total", "difference", "created_at", "items")
-
-
-class POSSaleCorrectionInputItemSerializer(serializers.Serializer):
-    sale_item_id = serializers.IntegerField(min_value=1)
-    corrected_quantity = serializers.IntegerField(min_value=1, max_value=100000)
-
-
-class POSSaleCorrectionCreateSerializer(serializers.Serializer):
-    items = POSSaleCorrectionInputItemSerializer(many=True, allow_empty=False)
-    reason = serializers.CharField(max_length=240)
