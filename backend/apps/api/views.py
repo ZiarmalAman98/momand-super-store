@@ -4,6 +4,7 @@ from django.db import transaction, IntegrityError
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import F, Q
 from django.db.models import Count, Sum
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from rest_framework import generics, status, viewsets
@@ -70,7 +71,9 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
             queryset = queryset.filter(stockrecords__price__lte=maximum)
         if self.request.query_params.get("available") == "true":
             queryset = queryset.filter(
-                stockrecords__num_in_stock__gt=F("stockrecords__num_allocated")
+                stockrecords__num_in_stock__gt=Coalesce(
+                    F("stockrecords__num_allocated"), 0
+                )
             )
         return queryset
 
