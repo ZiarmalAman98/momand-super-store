@@ -10,6 +10,8 @@ from rest_framework import status
 PERMISSIONS = [
     ("mis.view_possale", "POS: view sales / print receipts"),
     ("mis.add_possale", "POS: create sales"),
+    ("mis.change_possale", "POS: edit/manage sales"),
+    ("mis.delete_possale", "POS: delete sales"),
     ("mis.view_possalereturn", "POS: view returns"),
     ("mis.add_possalereturn", "POS: process returns"),
     ("mis.view_cashiershift", "POS: view cashier shift"),
