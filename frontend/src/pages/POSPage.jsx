@@ -34,7 +34,7 @@ export default function POSPage() {
 
   if (!ready) return <main className="site-container page-section"><div className="product-skeleton detail-skeleton" /></main>
   if (!user) return <Navigate to="/login" replace />
-  if (!user.is_staff) return <main className="site-container page-section"><div className="state-card"><strong>Staff access required.</strong><p>Sign in with an authorised store account to use POS.</p></div></main>
+  if (!user.is_staff || !user.permissions?.pos) return <main className="site-container page-section"><div className="state-card"><strong>Access denied.</strong><p>Your account is not authorised to use POS.</p></div></main>
 
   function add(product) {
     if (!product.in_stock) { setError(`${product.title} is out of stock.`); return }
@@ -64,7 +64,7 @@ export default function POSPage() {
   }
 
   return <main className="pos-shell">
-    <header className="pos-heading"><div><span className="eyebrow">MOMAND SUPER STORE · CASHIER</span><h1>Point of sale</h1><p>Scan a barcode or search the product catalogue.</p></div><div className="pos-heading-actions"><Link className="button-outline" to="/pos/sales">Sales history</Link><Link className="button-outline" to="/pos/returns">Returns</Link><span className="pos-operator">{user.first_name || user.email}</span></div></header>
+    <header className="pos-heading"><div><span className="eyebrow">MOMAND SUPER STORE · CASHIER</span><h1>Point of sale</h1><p>Scan a barcode or search the product catalogue.</p></div><div className="pos-heading-actions">{(user.permission_codes?.includes("mis.change_possale") || user.permission_codes?.includes("mis.delete_possale")) && <Link className="button-outline" to="/pos/sales">Sales history</Link>}{user.permission_codes?.includes("mis.add_possalereturn") && <Link className="button-outline" to="/pos/returns">Returns</Link>}<span className="pos-operator">{user.first_name || user.email}</span></div></header>
     <section className="pos-workspace"><div className="pos-catalogue"><label className="pos-search"><Barcode size={19} /><input ref={inputRef} autoFocus value={term} onChange={event => setTerm(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && results.length) { event.preventDefault(); add(results[0]) } }} placeholder="Scan barcode or search products…" /><Search size={18} /></label>
       {results.length > 0 && <div className="pos-results">{results.map(product => <button key={product.id} className="pos-result" onClick={() => add(product)}><span><b>{product.title}</b><small>{product.upc || 'No barcode'} · {product.in_stock ? `${product.available_quantity ?? '∞'} available` : 'Out of stock'}</small></span><strong>{money(product.price)}</strong></button>)}</div>}
       <div className="pos-catalogue-empty">{term ? (results.length ? 'Choose a matching product or press Enter to add the first exact barcode match.' : 'No matching products.') : 'The cashier product search is ready. Scanner input is handled as keyboard input.'}</div>

@@ -26,6 +26,7 @@ import RegisterPage from './pages/RegisterPage'
 import ReceiptPage from './pages/ReceiptPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
 import ShopPage from './pages/ShopPage'
+import UsersPage from './pages/UsersPage'
 
 function NotFound() {
   return <section className="site-container page-section"><div className="state-card"><strong>We couldn’t find that page.</strong><p>The link may have changed or the page may not exist.</p><a className="text-link" href="/">Return to the store</a></div></section>
@@ -77,6 +78,7 @@ export default function App() {
       <Route path="reports" element={<DashboardPage />} />
       <Route path="customers" element={<AccountPage />} />
       <Route path="payments" element={<DashboardPage />} />
+      <Route path="users" element={<UsersPage />} />
     </Route>
 
     <Route path="*" element={<NotFound />} />

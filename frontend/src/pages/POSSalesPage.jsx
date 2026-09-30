@@ -8,10 +8,10 @@ export default function POSSalesPage() {
   const [sales, setSales] = useState([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
-  useEffect(() => { if (user?.is_staff) api.posSales().then(data => setSales(data.results || data)).catch(err => setError(err.message)).finally(() => setLoading(false)) }, [user])
+  useEffect(() => { if (user?.is_staff && (user.permission_codes?.includes('mis.change_possale') || user.permission_codes?.includes('mis.delete_possale'))) api.posSales().then(data => setSales(data.results || data)).catch(err => setError(err.message)).finally(() => setLoading(false)) }, [user])
   if (!ready) return <section className="site-container page-section"><div className="product-skeleton detail-skeleton" /></section>
   if (!user) return <Navigate to="/login" replace />
-  if (!user.is_staff) return <section className="site-container page-section"><div className="state-card"><strong>Staff access required.</strong></div></section>
+  if (!user.is_staff || !(user.permission_codes?.includes('mis.change_possale') || user.permission_codes?.includes('mis.delete_possale'))) return <section className="site-container page-section"><div className="state-card"><strong>Access denied.</strong><p>Sales history is restricted to authorised management users.</p></div></section>
   const money = (amount, currency) => new Intl.NumberFormat(undefined, { style: 'currency', currency: currency || 'AFN' }).format(amount || 0)
   return <section className="site-container page-section"><div className="page-title-row"><div><span className="eyebrow">CASHIER OPERATIONS</span><h1>POS sales</h1><p>Completed in-store sales and receipt reprints.</p></div><Link className="button-primary" to="/pos">Open POS</Link></div>
     {error && <div className="inline-error" role="alert">{error}</div>}
