@@ -80,11 +80,11 @@ def correct_pos_sale(*, invoice_number, processed_by, items, reason):
         original_total=original_total, corrected_total=sale.total,
         difference=original_total - sale.total,
     )
-    for sale_item, corrected_quantity in normalized:
+    for sale_item, original_quantity, corrected_quantity in normalized:
         POSSaleCorrectionItem.objects.create(
             correction=correction, sale_item=sale_item,
-            original_quantity=corrected_quantity + (sale_item.quantity - corrected_quantity),
+            original_quantity=original_quantity,
             corrected_quantity=corrected_quantity,
-            quantity_delta=corrected_quantity - (corrected_quantity + (sale_item.quantity - corrected_quantity)),
+            quantity_delta=corrected_quantity - original_quantity,
         )
     return correction
