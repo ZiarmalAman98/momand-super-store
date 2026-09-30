@@ -2,6 +2,7 @@
 from decimal import Decimal
 
 import django.core.validators
+import apps.mis.models
 import django.db.models.deletion
 from django.conf import settings
 from django.db import migrations, models
@@ -174,7 +175,7 @@ class Migration(migrations.Migration):
                 (
                     "invoice_number",
                     models.CharField(
-                        default=__import__("apps.mis.models", fromlist=["make_pos_invoice_number"]).make_pos_invoice_number,
+                        default=apps.mis.models.make_pos_invoice_number,
                         editable=False,
                         max_length=32,
                         unique=True,
@@ -380,7 +381,7 @@ class Migration(migrations.Migration):
                 (
                     "invoice_number",
                     models.CharField(
-                        default=__import__("apps.mis.models", fromlist=["make_pos_return_number"]).make_pos_return_number,
+                        default=apps.mis.models.make_pos_return_number,
                         editable=False,
                         max_length=32,
                         unique=True,
