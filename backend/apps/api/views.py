@@ -366,6 +366,7 @@ class POSSaleCreateView(APIView):
                 items=request.data.get("items"),
                 payment_method=request.data.get("payment_method", "cash"),
                 amount_tendered=request.data.get("amount_tendered"),
+                payment_lines=request.data.get("payment_lines"),
                 customer_id=request.data.get("customer_id"),
             )
         except drf_serializers.ValidationError as exc:

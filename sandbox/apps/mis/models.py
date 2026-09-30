@@ -137,10 +137,12 @@ class POSSale(models.Model):
     PAYMENT_CASH = "cash"
     PAYMENT_CARD = "card"
     PAYMENT_TRANSFER = "bank_transfer"
+    PAYMENT_SPLIT = "split"
     PAYMENT_CHOICES = [
         (PAYMENT_CASH, "Cash"),
         (PAYMENT_CARD, "Card"),
         (PAYMENT_TRANSFER, "Bank transfer"),
+        (PAYMENT_SPLIT, "Split payment"),
     ]
 
     invoice_number = models.CharField(

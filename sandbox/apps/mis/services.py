@@ -88,13 +88,37 @@ def _lock_stock_records(record_ids):
 
 
 @transaction.atomic
-def create_pos_sale(*, cashier, items, payment_method, amount_tendered, customer_id=None):
+def create_pos_sale(*, cashier, items, payment_method=None, amount_tendered=None, customer_id=None, payment_lines=None):
     if not isinstance(items, list) or not items:
         raise ValidationError({"items": "Add at least one product to the sale."})
     if any(not isinstance(item, dict) for item in items):
         raise ValidationError({"items": "Each sale item must be an object."})
-    if payment_method not in dict(POSSale.PAYMENT_CHOICES):
-        raise ValidationError({"payment_method": "Choose cash, card, or bank transfer."})
+    allowed_methods = {POSSale.PAYMENT_CASH, POSSale.PAYMENT_CARD, POSSale.PAYMENT_TRANSFER}
+    normalized_lines = []
+    if payment_lines is not None:
+        if not isinstance(payment_lines, list) or not payment_lines:
+            raise ValidationError({"payment_lines": "Add at least one payment line."})
+        for line in payment_lines:
+            if not isinstance(line, dict):
+                raise ValidationError({"payment_lines": "Each payment line must be an object."})
+            method = line.get("method")
+            if method not in allowed_methods:
+                raise ValidationError({"payment_lines": "Payment method must be cash, card, or bank transfer."})
+            amount = _decimal(line.get("amount"), "payment_lines")
+            if amount <= 0:
+                raise ValidationError({"payment_lines": "Payment amounts must be greater than zero."})
+            tendered = _decimal(line.get("tendered", line.get("amount")), "payment_lines")
+            if method != POSSale.PAYMENT_CASH and tendered != amount:
+                raise ValidationError({"payment_lines": "Card and bank-transfer tendered amount must equal the applied amount."})
+            if method == POSSale.PAYMENT_CASH and tendered < amount:
+                raise ValidationError({"payment_lines": "Cash tendered cannot be less than the applied cash amount."})
+            normalized_lines.append((method, amount, tendered))
+        payment_method = POSSale.PAYMENT_SPLIT if len(normalized_lines) > 1 else normalized_lines[0][0]
+    else:
+        if payment_method not in allowed_methods:
+            raise ValidationError({"payment_method": "Choose cash, card, or bank transfer."})
+        tendered = _decimal(amount_tendered, "amount_tendered")
+        normalized_lines = [(payment_method, _decimal(amount_tendered, "amount_tendered"), tendered)]
     customer = None
     if customer_id:
         try:
@@ -144,29 +168,29 @@ def create_pos_sale(*, cashier, items, payment_method, amount_tendered, customer
     line_taxes = {record.pk: (price * tax_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) for _product, record, _quantity, price, _line_total in prepared}
     tax = sum((line_taxes[record.pk] * quantity for _product, record, quantity, _price, _line_total in prepared), Decimal("0.00"))
     total = subtotal + tax
-    tendered = _decimal(amount_tendered, "amount_tendered")
-    if tendered < total:
-        raise ValidationError({"amount_tendered": f"Payment must be at least {total}."})
-    change = (tendered - total) if payment_method == POSSale.PAYMENT_CASH else Decimal("0.00")
-    if payment_method != POSSale.PAYMENT_CASH and tendered != total:
-        raise ValidationError({"amount_tendered": "Non-cash payment must match the sale total."})
+    applied_total = sum((amount for _method, amount, _tendered in normalized_lines), Decimal("0.00"))
+    cash_change = sum((tendered - amount for method, amount, tendered in normalized_lines if method == POSSale.PAYMENT_CASH), Decimal("0.00"))
+    if applied_total != total:
+        raise ValidationError({"payment_lines": f"Payment total must equal {total}."})
+    tendered_total = sum((tendered for _method, _amount, tendered in normalized_lines), Decimal("0.00"))
 
     sale = POSSale.objects.create(
         cashier=cashier, customer=customer, currency=currency,
         subtotal=subtotal, tax=tax, total=total,
-        payment_method=payment_method, amount_tendered=tendered, change_due=change,
+        payment_method=payment_method, amount_tendered=tendered_total, change_due=cash_change,
     )
-    PaymentTransaction.objects.create(
-        transaction_ref=f"PAY-{sale.invoice_number}",
-        sale=sale,
-        method=payment_method,
-        status=PaymentTransaction.STATUS_PAID,
-        amount=total,
-        gateway="pos",
-        note="POS payment captured",
-        created_by=cashier,
-        paid_at=timezone.now(),
-    )
+    for index, (method, amount, _tendered) in enumerate(normalized_lines, start=1):
+        PaymentTransaction.objects.create(
+            transaction_ref=f"PAY-{sale.invoice_number}-{index}",
+            sale=sale,
+            method=method,
+            status=PaymentTransaction.STATUS_PAID,
+            amount=amount,
+            gateway="pos",
+            note="POS payment captured",
+            created_by=cashier,
+            paid_at=timezone.now(),
+        )
     for product, record, quantity, price, line_total in prepared:
         before = max(0, record.net_stock_level or 0)
         if record.num_in_stock is None or record.num_in_stock < (record.num_allocated or 0) + quantity:
