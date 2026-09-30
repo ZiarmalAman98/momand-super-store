@@ -5,7 +5,7 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 from oscar.test.factories import ProductFactory
 
-from .models import POSSale, Purchase, StockMovement, Supplier
+from .models import PaymentTransaction, POSSale, Purchase, StockMovement, Supplier
 from .services import adjust_stock, create_pos_sale, process_pos_return, receive_purchase
 
 
@@ -24,6 +24,11 @@ class InventoryTransactionTests(TestCase):
         )
         self.record.refresh_from_db()
         movement = StockMovement.objects.get(reference=sale.invoice_number)
+        payment = PaymentTransaction.objects.get(sale=sale)
+        self.assertEqual(payment.status, PaymentTransaction.STATUS_PAID)
+        self.assertEqual(payment.amount, sale.total)
+        self.assertEqual(payment.method, POSSale.PAYMENT_CASH)
+        self.assertEqual(payment.gateway, "pos")
         self.assertEqual(sale.total, Decimal("25.00"))
         self.assertEqual(sale.change_due, Decimal("5.00"))
         self.assertEqual(self.record.num_in_stock, 6)
