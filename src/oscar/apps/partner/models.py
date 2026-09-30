@@ -46,6 +46,14 @@ if not is_model_registered("partner", "StockRecord"):
             null=True,
             validators=[MinValueValidator(0)],
         )
+        cost_price = models.DecimalField(
+            "Average cost price",
+            decimal_places=2,
+            max_digits=12,
+            blank=True,
+            null=True,
+            validators=[MinValueValidator(0)],
+        )
 
         class Meta:
             constraints = [
