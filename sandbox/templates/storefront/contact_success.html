@@ -1,0 +1,9 @@
+{% extends "storefront/base.html" %}
+{% block title %}Message sent{% endblock %}
+{% block content %}
+<section class="page"><div class="wrap">
+  <div class="eyebrow">Contact</div><h1>Thank you for your message.</h1>
+  <p>Your message has been saved. The store team can review it in the administration area.</p>
+  <a class="button" href="{% url 'storefront:home' %}">Back to home</a>
+</div></section>
+{% endblock %}

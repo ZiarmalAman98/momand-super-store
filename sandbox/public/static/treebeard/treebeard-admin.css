@@ -1,0 +1,84 @@
+/* Treebeard Admin */
+
+.drag-handler {
+    display: inline-block;
+    vertical-align: middle;
+    cursor: move;
+    width: 16px;
+    height: 16px;
+    background-image: url(drag.svg);
+    background-repeat:  no-repeat;
+    background-position: center;
+    background-size: cover;
+    margin-right: 10px;
+    opacity: 0.6;
+}
+
+.drag-handler-disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+.spacer {
+    width: 10px;
+    margin: 0 10px;
+}
+
+.treebeard-collapse::before {
+    display: block;
+    display: inline-block;
+    margin-right: 5px;
+    padding: 0 5px;
+    content: "+";
+    color: #000;
+    font-weight: bold;
+    background-color: #DDD;
+    border-radius: 4px;
+}
+
+.treebeard-collapse.treebeard-expanded::before {
+    content: "-"
+}
+
+@keyframes flicker {
+  0%   { opacity:1; }
+  50%  { opacity:0; }
+  100% { opacity:1; }
+}
+
+.treebeard-collapse.treebeard-loading::before {
+  content: "···";
+  animation: flicker 1s infinite;
+}
+
+#drag-tooltip {
+    position: absolute;
+    pointer-events: none; 
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100px;
+    background: #FFD;
+    color: #000;
+    left: 100px;
+    text-align: center;
+    border: 1px solid #000;
+}
+
+.active-node {
+    background-color: #B7D7E8 !important;
+}
+
+.target-node-parent {
+    background-color: rgba(170, 0, 170, 0.4) !important;
+}
+
+.target-node-sibling {
+    border-top: 2px solid rgba(170, 0, 170, 1) !important;
+}
+
+#ghost {
+    position: absolute;
+    width: 600px;
+    top: -10000px;
+}

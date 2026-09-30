@@ -1,0 +1,59 @@
+{% extends "oscar/base.html" %}
+{% load static %}
+
+{% block styles %}
+    <link rel="stylesheet" type="text/css" href="{% static 'oscar/css/styles.css' %}" />
+{% endblock %}
+
+{% block extrastyles %}
+    {{ block.super }}
+    <link rel="stylesheet" type="text/css" href="{% static 'css/storefront.css' %}" />
+{% endblock %}
+
+{% block layout %}
+    {% include "oscar/partials/nav_accounts.html" %}
+    <header class="header container">
+        <div class="page_inner">
+            <div class="row justify-content-between align-items-center">
+                {% include "oscar/partials/brand.html" %}
+                {% block mini_basket %}{% include "oscar/partials/mini_basket.html" %}{% endblock %}
+            </div>
+        </div>
+        {% block navigation %}{% include "oscar/partials/nav_primary.html" %}{% endblock %}
+    </header>
+
+    {% block content_wrapper %}
+        <div class="container page">
+            <div class="page_inner">
+                {% block breadcrumbs %}{% endblock %}
+                {% block header %}
+                    <div class="page-header"><h1>{% block headertext %}{% endblock %}</h1></div>
+                {% endblock %}
+                {% include "oscar/partials/alert_messages.html" %}
+                {% block subnavigation %}{% endblock %}
+                <div class="content">
+                    {% block subheader %}{% endblock subheader %}
+                    <div id="content_inner">{% block content %}{% endblock %}</div>
+                </div>
+            </div>
+        </div>
+    {% endblock %}
+
+    {% include "oscar/partials/footer.html" %}
+{% endblock %}
+
+{% block scripts %}
+    {{ block.super }}
+    <script src="{% static 'oscar/js/bootstrap4/bootstrap.bundle.min.js' %}"></script>
+    <script src="{% static 'oscar/js/oscar/ui.js' %}"></script>
+{% endblock %}
+
+{% block extrascripts %}
+    {% include "oscar/partials/extrascripts.html" %}
+    {{ block.super }}
+{% endblock %}
+
+{% block onbodyload %}
+    {{ block.super }}
+    oscar.init();
+{% endblock %}

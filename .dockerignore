@@ -1,0 +1,15 @@
+.cache
+.tox
+.tx
+__pycache__
+*.pyc
+node_modules/
+venv/
+.env
+.git/
+frontend/dist/
+frontend/node_modules/
+coverage.xml
+tests/
+docs/
+sandbox/public/

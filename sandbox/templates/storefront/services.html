@@ -1,0 +1,13 @@
+{% extends "storefront/base.html" %}
+{% block title %}Services{% endblock %}
+{% block content %}
+<section class="page"><div class="wrap">
+  <div class="eyebrow">Services</div><h1>Shopping support, from browsing to order tracking.</h1>
+  <p>Browse the product catalogue, place an order through the secure checkout, and use your account to review your order history.</p>
+  <div class="tiles" style="margin-top:30px">
+    <article class="tile"><h3>Product catalogue</h3><p>Find products and review their details before adding them to your basket.</p><a href="{% url 'catalogue:index' %}">Browse products →</a></article>
+    <article class="tile"><h3>Online ordering</h3><p>Place and manage orders through your customer account.</p><a href="{% url 'customer:login' %}">Sign in →</a></article>
+    <article class="tile"><h3>Customer support</h3><p>Send a question to the store team using the contact form.</p><a href="{% url 'storefront:contact' %}">Contact the team →</a></article>
+  </div>
+</div></section>
+{% endblock %}

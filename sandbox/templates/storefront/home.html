@@ -1,0 +1,18 @@
+{% extends "storefront/base.html" %}
+{% block title %}Welcome{% endblock %}
+{% block content %}
+<section class="hero"><div class="wrap hero-inner">
+  <div class="eyebrow">Welcome to Oscar Store</div>
+  <h1>Find what you need.<br>Order with confidence.</h1>
+  <p class="lead">Browse our products, manage your orders from your account, or contact our team for help.</p>
+  <div class="buttons"><a class="button" href="{% url 'catalogue:index' %}">Browse products</a><a class="button alt" href="{% url 'storefront:services' %}">Explore our services</a></div>
+</div></section>
+<section class="section"><div class="wrap">
+  <h2>How can we help?</h2><p class="section-intro">Everything you need to shop and keep track of your orders.</p>
+  <div class="tiles">
+    <article class="tile"><h3>Products</h3><p>Explore the store catalogue and find available products.</p><a href="{% url 'catalogue:index' %}">View products →</a></article>
+    <article class="tile"><h3>Order services</h3><p>Sign in to review your account and order history.</p><a href="{% url 'customer:summary' %}">View my orders →</a></article>
+    <article class="tile"><h3>Customer support</h3><p>Send us a message and our team can follow up with you.</p><a href="{% url 'storefront:contact' %}">Contact us →</a></article>
+  </div>
+</div></section>
+{% endblock %}

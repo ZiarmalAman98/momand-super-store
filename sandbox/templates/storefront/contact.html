@@ -1,0 +1,13 @@
+{% extends "storefront/base.html" %}
+{% block title %}Contact{% endblock %}
+{% block content %}
+<section class="page"><div class="wrap">
+  <div class="eyebrow">Contact</div><h1>How can we help?</h1>
+  <p>Send us a message. Your request will be saved for the store team to review.</p>
+  <form class="form" method="post">{% csrf_token %}
+    {{ form.non_field_errors }}
+    {% for field in form %}<p>{{ field.label_tag }}{{ field }}{{ field.errors }}</p>{% endfor %}
+    <div><button class="button" type="submit">Send message</button></div>
+  </form>
+</div></section>
+{% endblock %}

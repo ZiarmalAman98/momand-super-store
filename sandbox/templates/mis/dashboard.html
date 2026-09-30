@@ -1,0 +1,57 @@
+{% load i18n %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Store MIS</title>
+  <style>
+    :root { color-scheme: light; --ink:#182230; --muted:#65758b; --line:#e5eaf0; --blue:#1459c7; --bg:#f4f7fb; }
+    * { box-sizing:border-box } body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif }
+    header { display:flex; justify-content:space-between; align-items:center; gap:20px; padding:20px max(24px,calc((100% - 1180px)/2)); background:#10243f; color:white }
+    header h1 { margin:0; font-size:20px } header nav { display:flex; gap:18px; flex-wrap:wrap } header a { color:#e9f1ff; text-decoration:none }
+    main { max-width:1180px; margin:32px auto; padding:0 22px } .intro { display:flex; justify-content:space-between; align-items:end; margin-bottom:22px; gap:12px }
+    h2 { margin:0 0 4px; font-size:26px } .muted { color:var(--muted) } .grid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:14px }
+    .card, .panel { background:white; border:1px solid var(--line); border-radius:12px; box-shadow:0 3px 12px #142d4a08 }
+    .card { padding:18px } .card span { color:var(--muted); font-size:13px } .card strong { display:block; margin-top:9px; font-size:24px; overflow-wrap:anywhere }
+    .columns { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:18px } .panel { padding:18px; overflow:hidden }
+    .panel h3 { margin:0 0 14px; font-size:17px } table { width:100%; border-collapse:collapse; text-align:left } th,td { padding:10px 8px; border-top:1px solid var(--line); vertical-align:top } th { color:var(--muted); font-size:12px; font-weight:600; text-transform:uppercase }
+    .actions { display:flex; gap:10px; margin-top:18px; flex-wrap:wrap } .button { background:var(--blue); color:white; border-radius:8px; padding:10px 14px; text-decoration:none; font-weight:600 } .button.secondary { background:#e8effb; color:#184a99 }
+    @media(max-width:900px){.grid{grid-template-columns:repeat(2,1fr)}.columns{grid-template-columns:1fr}} @media(max-width:520px){header{align-items:flex-start;flex-direction:column}.grid{grid-template-columns:1fr 1fr}.card{padding:13px}.card strong{font-size:20px}}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Store MIS</h1>
+    <nav><a href="{% url 'mis:dashboard' %}">Overview</a><a href="{% url 'dashboard:index' %}">Oscar dashboard</a><a href="{% url 'admin:index' %}">Admin</a><a href="{% url 'customer:summary' %}">Storefront</a></nav>
+  </header>
+  <main>
+    <div class="intro"><div><h2>Business overview</h2><div class="muted">Summary for {{ today|date:"F j, Y" }}</div></div></div>
+    <section class="grid" aria-label="Business summary">
+      <div class="card"><span>Orders today</span><strong>{{ today_order_count }}</strong></div>
+      <div class="card"><span>Orders this month</span><strong>{{ month_order_count }}</strong></div>
+      <div class="card"><span>Revenue this month</span><strong>{{ month_revenue|floatformat:2 }}</strong></div>
+      <div class="card"><span>Purchases this month</span><strong>{{ month_purchase_cost|floatformat:2 }}</strong></div>
+      <div class="card"><span>Expenses this month</span><strong>{{ month_expenses|floatformat:2 }}</strong></div>
+    </section>
+    <div class="actions"><a class="button" href="{% url 'admin:mis_purchase_add' %}">Record purchase</a><a class="button" href="{% url 'admin:mis_expense_add' %}">Record expense</a><a class="button secondary" href="{% url 'admin:mis_supplier_changelist' %}">Manage suppliers</a></div>
+    <section class="columns">
+      <div class="panel"><h3>Low stock <span class="muted">({{ low_stock_count }})</span></h3>
+        <table><thead><tr><th>Product</th><th>Code</th><th>Available</th></tr></thead><tbody>
+        {% for record in low_stock %}<tr><td>{{ record.product.title }}</td><td>{{ record.partner_sku }}</td><td>{{ record.num_in_stock|default:0 }}</td></tr>{% empty %}<tr><td colspan="3" class="muted">No low-stock products.</td></tr>{% endfor %}
+        </tbody></table>
+      </div>
+      <div class="panel"><h3>Latest orders</h3>
+        <table><thead><tr><th>Number</th><th>Date</th><th>Status</th><th>Total</th></tr></thead><tbody>
+        {% for order in latest_orders %}<tr><td><a href="{% url 'dashboard:order-detail' order.number %}">{{ order.number }}</a></td><td>{{ order.date_placed|date:"Y-m-d" }}</td><td>{{ order.status }}</td><td>{{ order.total_incl_tax|floatformat:2 }}</td></tr>{% empty %}<tr><td colspan="4" class="muted">No orders recorded.</td></tr>{% endfor %}
+        </tbody></table>
+      </div>
+      <div class="panel"><h3>Recent expenses</h3>
+        <table><thead><tr><th>Description</th><th>Category</th><th>Date</th><th>Amount</th></tr></thead><tbody>
+        {% for expense in recent_expenses %}<tr><td>{{ expense.description }}</td><td>{{ expense.get_category_display }}</td><td>{{ expense.spent_at|date:"Y-m-d" }}</td><td>{{ expense.amount|floatformat:2 }}</td></tr>{% empty %}<tr><td colspan="4" class="muted">No expenses recorded.</td></tr>{% endfor %}
+        </tbody></table>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

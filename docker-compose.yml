@@ -1,0 +1,78 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: >
+      sh -c "python backend/manage.py migrate --noinput &&
+      python backend/manage.py oscar_populate_countries --initial-only &&
+      python backend/manage.py runserver 0.0.0.0:8000"
+    environment:
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
+      DEBUG: "true"
+      ALLOWED_HOSTS: localhost,127.0.0.1,backend
+      DATABASE_ENGINE: django.db.backends.postgresql
+      DATABASE_NAME: ${POSTGRES_DB:-momand_store}
+      DATABASE_USER: ${POSTGRES_USER:-momand}
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-momand_local_dev_password}
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      REDIS_URL: redis://redis:6379/1
+      CORS_ALLOWED_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      CSRF_TRUSTED_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      FRONTEND_URL: http://localhost:5173
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - store_media:/app/sandbox/public/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    image: node:22-alpine
+    working_dir: /app/frontend
+    command: sh -c "npm ci && npm run dev -- --host 0.0.0.0"
+    environment:
+      API_PROXY_TARGET: http://backend:8000
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app/frontend
+      - frontend_node_modules:/app/frontend/node_modules
+    depends_on:
+      - backend
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-momand_store}
+      POSTGRES_USER: ${POSTGRES_USER:-momand}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-momand_local_dev_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-momand} -d ${POSTGRES_DB:-momand_store}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres_data:
+  redis_data:
+  store_media:
+  frontend_node_modules:

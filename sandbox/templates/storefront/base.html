@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Welcome{% endblock %} | Oscar Store</title>
+  <style>
+    :root { --ink:#182436; --muted:#64748b; --blue:#1559c7; --navy:#10233e; --line:#e5eaf1; --bg:#f7f9fc }
+    * { box-sizing:border-box } body { margin:0; color:var(--ink); background:white; font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif }
+    a { color:inherit } .wrap { width:min(1120px,calc(100% - 40px)); margin:auto }
+    header { background:var(--navy); color:white } .nav { min-height:72px; display:flex; justify-content:space-between; align-items:center; gap:25px }
+    .brand { color:white; text-decoration:none; font-size:20px; font-weight:750; letter-spacing:.2px } nav { display:flex; gap:22px; align-items:center; flex-wrap:wrap } nav a { color:#e9f0fb; text-decoration:none; font-size:14px } nav a:hover { text-decoration:underline }
+    .nav .login { background:#fff; color:var(--navy); border-radius:8px; padding:8px 14px; font-weight:650 }
+    main { min-height:65vh } .hero { background:linear-gradient(120deg,#edf4ff,#f8fbff 60%,#e7f0ff); padding:88px 0 82px }
+    .hero-inner { max-width:760px } .eyebrow { color:var(--blue); font-size:13px; font-weight:750; letter-spacing:.12em; text-transform:uppercase }
+    h1 { font-size:clamp(38px,7vw,64px); line-height:1.08; letter-spacing:-.04em; margin:14px 0 18px } .lead { max-width:610px; color:#53647b; font-size:18px; margin:0 0 28px }
+    .buttons { display:flex; gap:12px; flex-wrap:wrap } .button { display:inline-block; padding:12px 18px; background:var(--blue); color:white; border-radius:9px; text-decoration:none; font-weight:700 }
+    .button.alt { background:white; border:1px solid #cdd9e9; color:var(--ink) }
+    .section { padding:54px 0 } .section h2 { margin:0 0 8px; font-size:29px; letter-spacing:-.02em } .section-intro { color:var(--muted); margin:0 0 24px }
+    .tiles { display:grid; grid-template-columns:repeat(3,1fr); gap:16px } .tile { border:1px solid var(--line); border-radius:13px; padding:23px; background:white }
+    .tile h3 { margin:0 0 7px; font-size:18px } .tile p { margin:0; color:var(--muted) } .tile a { display:inline-block; margin-top:15px; color:var(--blue); font-weight:700; text-decoration:none }
+    .page { padding:54px 0 72px } .page h1 { font-size:42px } .page p { color:#52627a; max-width:740px }
+    .form { max-width:650px; margin-top:26px; display:grid; gap:16px } .form p { margin:0 } .form label { display:block; color:var(--ink); font-weight:650; margin-bottom:5px }
+    .form input,.form textarea { width:100%; border:1px solid #cbd5e1; border-radius:8px; padding:11px 12px; font:inherit } .form textarea { resize:vertical }
+    .errorlist { color:#b42318; margin:4px 0; padding-left:20px } footer { border-top:1px solid var(--line); padding:25px 0; color:var(--muted); font-size:14px }
+    @media(max-width:720px){.nav{padding:14px 0;align-items:flex-start;flex-direction:column}nav{gap:12px 17px}.hero{padding:60px 0}.tiles{grid-template-columns:1fr}.page h1{font-size:36px}}
+  </style>
+</head>
+<body>
+  <header><div class="wrap nav">
+    <a class="brand" href="{% url 'storefront:home' %}">Oscar Store</a>
+    <nav aria-label="Main navigation">
+      <a href="{% url 'storefront:home' %}">Home</a>
+      <a href="{% url 'catalogue:index' %}">Products</a>
+      <a href="{% url 'storefront:services' %}">Services</a>
+      <a href="{% url 'storefront:contact' %}">Contact</a>
+      <a href="{% url 'customer:summary' %}">My orders</a>
+      <a class="login" href="{% url 'customer:login' %}">Login</a>
+    </nav>
+  </div></header>
+  <main>{% block content %}{% endblock %}</main>
+  <footer><div class="wrap">Oscar Store · <a href="{% url 'storefront:contact' %}">Contact us</a></div></footer>
+</body>
+</html>
