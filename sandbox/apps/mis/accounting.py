@@ -52,13 +52,8 @@ def financial_summary(*, start_date=None, end_date=None):
     # Revenue is reported before sales tax because tax collected is a liability,
     # not store revenue. Refunds are reduced by their pre-tax merchandise value.
     pos_revenue = _money(pos_sales.aggregate(value=Sum("subtotal"))["value"])
-    pos_refund_revenue = _money(
-        POSSaleReturnItem.objects.filter(
-            sale_return__created_at__range=(start_dt, end_dt)
-        ).aggregate(value=Sum("sale_item__unit_price"))["value"]
-    )
-    # The aggregate above is per unit, so use an explicit quantity-weighted
-    # calculation for exact historical return revenue.
+    # Return revenue is reconstructed from the original pre-tax unit price
+    # multiplied by the returned quantity.
     pos_refund_revenue = Decimal("0.00")
     for row in POSSaleReturnItem.objects.filter(
         sale_return__created_at__range=(start_dt, end_dt)
@@ -72,11 +67,6 @@ def financial_summary(*, start_date=None, end_date=None):
         online_orders.aggregate(value=Sum("total_excl_tax"))["value"]
     )
 
-    pos_cogs = _money(
-        pos_sales.items.aggregate(value=Sum("items__cost_total"))["value"]
-    ) if False else Decimal("0.00")
-    # Django cannot traverse the reverse relation through a QuerySet alias
-    # reliably across all supported Oscar configurations, so aggregate directly.
     from apps.mis.models import POSSaleItem
     pos_cogs = _money(
         POSSaleItem.objects.filter(
