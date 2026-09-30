@@ -7,6 +7,7 @@ from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, TokenRefreshSerializer
@@ -17,8 +18,19 @@ REFRESH_PATH = "/api/v1/auth/"
 
 
 class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
-    """Authenticate with the public email address rather than a generated username."""
+    """Authenticate the store's generated-username accounts by email."""
     username_field = "email"
+
+    def validate(self, attrs):
+        email = str(attrs.get("email", "")).strip().lower()
+        password = attrs.get("password", "")
+        user_model = get_user_model()
+        user = user_model.objects.filter(email__iexact=email).first()
+        if not user or not user.is_active or not user.check_password(password):
+            raise AuthenticationFailed("No active account found with the given credentials.")
+        refresh = self.get_token(user)
+        self.user = user
+        return {"refresh": str(refresh), "access": str(refresh.access_token)}
 
 
 def attach_refresh_cookie(response, token):
