@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Expense, POSSale, POSSaleItem, POSSaleReturn, POSSaleReturnItem, Purchase, PurchaseItem, StockMovement, Supplier
+from .models import Expense, PaymentTransaction, POSSale, POSSaleItem, POSSaleReturn, POSSaleReturnItem, Purchase, PurchaseItem, StockMovement, Supplier
 
 
 @admin.register(Supplier)
@@ -124,3 +124,20 @@ class StockMovementAdmin(admin.ModelAdmin):
 
 
 PurchaseAdmin.inlines = (PurchaseItemInline,)
+
+
+@admin.register(PaymentTransaction)
+class PaymentTransactionAdmin(admin.ModelAdmin):
+    list_display = ("transaction_ref", "sale", "order", "method", "status", "amount", "refunded_amount", "created_at")
+    list_filter = ("method", "status", "gateway", "created_at")
+    search_fields = ("transaction_ref", "sale__invoice_number", "order__number", "gateway", "note")
+    readonly_fields = tuple(field.name for field in PaymentTransaction._meta.fields)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
