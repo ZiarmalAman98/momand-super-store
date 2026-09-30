@@ -32,6 +32,7 @@ from .views import (
     CountryListView,
     DashboardSummaryView,
     ExpenseViewSet,
+    PaymentTransactionListView,
     POSSaleReturnCreateView,
     POSSaleReturnListView,
 )
@@ -56,6 +57,7 @@ urlpatterns = [
     path("pos/sales/<str:invoice_number>/", POSSaleDetailView.as_view(), name="api-pos-sale-detail"),
     path("pos/sales/<str:invoice_number>/returns/", POSSaleReturnCreateView.as_view(), name="api-pos-sale-return"),
     path("pos/returns/", POSSaleReturnListView.as_view(), name="api-pos-returns"),
+    path("payments/transactions/", PaymentTransactionListView.as_view(), name="api-payment-transactions"),
     path("purchases/", PurchaseListView.as_view(), name="api-purchases"),
     path("purchases/receive/", PurchaseReceiveView.as_view(), name="api-purchase-receive"),
     path("inventory/movements/", StockMovementListView.as_view(), name="api-stock-movements"),
