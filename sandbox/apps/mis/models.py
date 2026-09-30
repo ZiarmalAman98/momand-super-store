@@ -614,6 +614,10 @@ class CashierShift(models.Model):
 
     class Meta:
         ordering = ["-opened_at", "-id"]
+        permissions = [
+            ("view_cashiershift_all", "Can view all cashier shifts"),
+            ("change_cashiershift_all", "Can manage all cashier shifts"),
+        ]
         indexes = [
             models.Index(fields=["cashier", "status"]),
             models.Index(fields=["opened_at", "status"]),
