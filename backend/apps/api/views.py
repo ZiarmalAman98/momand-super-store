@@ -2,7 +2,7 @@ from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django.db import transaction, IntegrityError
 from django.core.exceptions import ObjectDoesNotExist
-from django.db.models import Q
+from django.db.models import F, Q
 from django.db.models import Count, Sum
 from django.utils import timezone
 from django.utils.dateparse import parse_date
@@ -68,7 +68,9 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         if maximum:
             queryset = queryset.filter(stockrecords__price__lte=maximum)
         if self.request.query_params.get("available") == "true":
-            queryset = queryset.filter(stockrecords__num_in_stock__gt=0)
+            queryset = queryset.filter(
+                stockrecords__num_in_stock__gt=F("stockrecords__num_allocated")
+            )
         return queryset
 
 
@@ -243,10 +245,28 @@ class CheckoutView(APIView):
 
         try:
             with transaction.atomic():
-                for line in basket.all_lines():
-                    record = line.stockrecord.__class__.objects.select_for_update().get(pk=line.stockrecord_id)
-                    if record.num_in_stock is not None and record.net_stock_level < line.quantity:
-                        return Response({"detail": f"Insufficient stock for {line.product.get_title()}."}, status=400)
+                basket_lines = list(basket.all_lines())
+                stockrecord_ids = sorted({line.stockrecord_id for line in basket_lines})
+                locked_records = {
+                    record.pk: record
+                    for record in line.stockrecord.__class__.objects.select_for_update().filter(
+                        pk__in=stockrecord_ids
+                    ).order_by("pk")
+                }
+                if len(locked_records) != len(stockrecord_ids):
+                    return Response({"detail": "One or more products are no longer available."}, status=409)
+
+                for line in basket_lines:
+                    record = locked_records[line.stockrecord_id]
+                    if (
+                        record.num_in_stock is not None
+                        and record.net_stock_level < line.quantity
+                    ):
+                        return Response(
+                            {"detail": f"Insufficient stock for {line.product.get_title()}."},
+                            status=409,
+                        )
+
                 address = ShippingAddress(
                     first_name=str(data["first_name"]).strip()[:255],
                     last_name=str(data["last_name"]).strip()[:255],
