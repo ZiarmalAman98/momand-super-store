@@ -20,7 +20,7 @@ class POSSaleCorrection(models.Model):
 
     class Meta:
         ordering = ["-created_at", "-id"]
-        indexes = [models.Index(fields=["sale", "created_at"])]
+        indexes = [models.Index(fields=["sale", "created_at"], name="mis_pos_sale_sale_id_7f9e5b_idx")]
 
 
 class POSSaleCorrectionItem(models.Model):
@@ -39,4 +39,4 @@ class POSSaleCorrectionItem(models.Model):
             models.CheckConstraint(condition=models.Q(corrected_quantity__gte=1), name="mis_corr_corrected_qty_positive"),
             models.CheckConstraint(condition=~models.Q(quantity_delta=0), name="mis_corr_qty_delta_nonzero"),
         ]
-        indexes = [models.Index(fields=["sale_item", "correction"])]
+        indexes = [models.Index(fields=["sale_item", "correction"], name="mis_pos_corr_sale_i_6a0b9e_idx")]
