@@ -36,6 +36,31 @@ class InventoryTransactionTests(TestCase):
         self.assertEqual(movement.quantity_before, 8)
         self.assertEqual(movement.quantity_after, 6)
 
+    def test_split_payment_creates_multiple_payment_transactions(self):
+        sale = create_pos_sale(
+            cashier=self.cashier,
+            items=[{"product_id": self.product.pk, "quantity": 2}],
+            payment_lines=[
+                {"method": POSSale.PAYMENT_CASH, "amount": "10.00", "tendered": "20.00"},
+                {"method": POSSale.PAYMENT_CARD, "amount": "15.00"},
+            ],
+        )
+        payments = list(PaymentTransaction.objects.filter(sale=sale).order_by("transaction_ref"))
+        self.assertEqual(sale.payment_method, POSSale.PAYMENT_SPLIT)
+        self.assertEqual(sale.amount_tendered, Decimal("35.00"))
+        self.assertEqual(sale.change_due, Decimal("10.00"))
+        self.assertEqual([p.amount for p in payments], [Decimal("10.00"), Decimal("15.00")])
+        self.assertEqual([p.method for p in payments], [POSSale.PAYMENT_CASH, POSSale.PAYMENT_CARD])
+
+    def test_split_payment_must_equal_sale_total(self):
+        with self.assertRaises(ValidationError):
+            create_pos_sale(
+                cashier=self.cashier,
+                items=[{"product_id": self.product.pk, "quantity": 2}],
+                payment_lines=[{"method": POSSale.PAYMENT_CASH, "amount": "10.00", "tendered": "10.00"}],
+            )
+        self.assertEqual(POSSale.objects.count(), 0)
+
     def test_duplicate_scanner_lines_are_aggregated_before_stock_deduction(self):
         sale = create_pos_sale(
             cashier=self.cashier,
