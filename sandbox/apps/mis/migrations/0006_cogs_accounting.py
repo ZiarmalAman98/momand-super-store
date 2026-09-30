@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from django.core.validators import MinValueValidator
 from django.db import migrations, models
+import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
@@ -62,7 +63,7 @@ class Migration(migrations.Migration):
                 ("unit_cost", models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.00"))])),
                 ("cost_total", models.DecimalField(max_digits=14, decimal_places=2, validators=[MinValueValidator(Decimal("0.00"))])),
                 ("created_at", models.DateTimeField(auto_now_add=True, db_index=True)),
-                ("order", models.ForeignKey(on_delete=models.deletion.PROTECT, related_name="mis_cost_lines", to="order.order")),
+                ("order", models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name="mis_cost_lines", to="order.order")),
                 ("product", models.ForeignKey(on_delete=models.deletion.PROTECT, related_name="online_order_costs", to="catalogue.product")),
                 ("stockrecord", models.ForeignKey(on_delete=models.deletion.PROTECT, related_name="online_order_costs", to="partner.stockrecord")),
             ],
