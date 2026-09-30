@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { Navigate, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { BarChart3, Boxes, CreditCard, FileText, LayoutDashboard, LogOut, Package, ShoppingCart, Store, Truck, Users, Wallet } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 
@@ -19,7 +19,7 @@ export default function AdminLayout() {
   const { user, ready, logout } = useAuth()
   const navigate = useNavigate()
   if (!ready) return <section className="site-container page-section"><div className="product-skeleton detail-skeleton" /></section>
-  if (!user?.is_staff) return null
+  if (!user?.is_staff) return <Navigate to="/admin/login" replace />
 
   async function signOut() {
     await logout()
