@@ -36,11 +36,12 @@ from .serializers import (
     POSSaleReturnSerializer,
     POSSaleReturnCreateSerializer,
     PaymentTransactionSerializer,
+    CashierShiftSerializer,
 )
 from .services import add_to_basket, get_session_basket
 from .permissions import HasMISPermission
-from apps.mis.models import Expense, PaymentTransaction, POSSale, POSSaleItem, POSSaleReturn, Purchase, StockMovement, Supplier
-from apps.mis.services import adjust_stock, create_pos_sale, process_pos_return, receive_purchase
+from apps.mis.models import CashierShift, Expense, PaymentTransaction, POSSale, POSSaleItem, POSSaleReturn, Purchase, StockMovement, Supplier
+from apps.mis.services import adjust_stock, close_cashier_shift, create_pos_sale, open_cashier_shift, process_pos_return, receive_purchase
 
 Category = get_model("catalogue", "Category")
 Product = get_model("catalogue", "Product")
@@ -545,6 +546,67 @@ class StockAdjustmentView(APIView):
             return Response(exc.detail, status=400)
         return Response(StockMovementSerializer(movement).data, status=201)
 
+
+
+class CashierShiftListCreateView(generics.ListCreateAPIView):
+    serializer_class = CashierShiftSerializer
+    permission_classes = (HasMISPermission,)
+    required_permission = "mis.view_cashiershift"
+
+    def get_queryset(self):
+        user = self.request.user
+        queryset = CashierShift.objects.select_related("cashier")
+        if user.has_perm("mis.view_cashiershift") and not user.has_perm("mis.view_cashiershift_all"):
+            return queryset.filter(cashier=user)
+        return queryset
+
+    def create(self, request, *args, **kwargs):
+        if not request.user.has_perm("mis.add_cashiershift"):
+            return Response({"detail": "You do not have permission to open a cashier shift."}, status=status.HTTP_403_FORBIDDEN)
+        serializer = CashierShiftSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            shift = open_cashier_shift(
+                cashier=request.user,
+                opening_cash=serializer.validated_data["opening_cash"],
+            )
+        except ValidationError as exc:
+            return Response(exc.message_dict, status=status.HTTP_400_BAD_REQUEST)
+        return Response(CashierShiftSerializer(shift).data, status=status.HTTP_201_CREATED)
+
+
+class CurrentCashierShiftView(generics.RetrieveAPIView):
+    serializer_class = CashierShiftSerializer
+    permission_classes = (HasMISPermission,)
+    required_permission = "mis.view_cashiershift"
+
+    def get_object(self):
+        return get_object_or_404(
+            CashierShift.objects.select_related("cashier"),
+            cashier=self.request.user,
+            status=CashierShift.STATUS_OPEN,
+        )
+
+
+class CashierShiftCloseView(APIView):
+    permission_classes = (HasMISPermission,)
+    required_permission = "mis.change_cashiershift"
+
+    def post(self, request, pk):
+        shift = get_object_or_404(CashierShift, pk=pk)
+        if shift.cashier_id != request.user.pk and not request.user.has_perm("mis.change_cashiershift_all"):
+            return Response({"detail": "You can only close your own cashier shift."}, status=status.HTTP_403_FORBIDDEN)
+        serializer = CashierShiftSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        try:
+            closed = close_cashier_shift(
+                shift_id=shift.pk,
+                closing_cash=serializer.validated_data.get("closing_cash"),
+                note=serializer.validated_data.get("note", ""),
+            )
+        except ValidationError as exc:
+            return Response(exc.message_dict, status=status.HTTP_400_BAD_REQUEST)
+        return Response(CashierShiftSerializer(closed).data)
 
 class DashboardSummaryView(APIView):
     permission_classes = (HasAnyMISPermission,)
