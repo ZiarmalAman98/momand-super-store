@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Expense, PaymentTransaction, POSSale, POSSaleItem, POSSaleReturn, POSSaleReturnItem, Purchase, PurchaseItem, StockMovement, Supplier
+from .models import CashierShift, Expense, PaymentTransaction, POSSale, POSSaleItem, POSSaleReturn, POSSaleReturnItem, Purchase, PurchaseItem, StockMovement, Supplier
 
 
 @admin.register(Supplier)
@@ -132,6 +132,23 @@ class PaymentTransactionAdmin(admin.ModelAdmin):
     list_filter = ("method", "status", "gateway", "created_at")
     search_fields = ("transaction_ref", "sale__invoice_number", "order__number", "gateway", "note")
     readonly_fields = tuple(field.name for field in PaymentTransaction._meta.fields)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(CashierShift)
+class CashierShiftAdmin(admin.ModelAdmin):
+    list_display = ("cashier", "opened_at", "closed_at", "opening_cash", "expected_cash", "closing_cash", "cash_difference", "status")
+    list_filter = ("status", "opened_at", "closed_at")
+    search_fields = ("cashier__username", "cashier__email", "note")
+    readonly_fields = tuple(field.name for field in CashierShift._meta.fields)
 
     def has_add_permission(self, request):
         return False

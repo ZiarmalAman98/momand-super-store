@@ -9,7 +9,7 @@ from rest_framework import serializers
 from oscar.core.loading import get_model
 
 from apps.storefront.models import ContactMessage
-from apps.mis.models import Expense, PaymentTransaction, POSSale, POSSaleItem, POSSaleReturn, POSSaleReturnItem, Purchase, StockMovement, Supplier
+from apps.mis.models import CashierShift, Expense, PaymentTransaction, POSSale, POSSaleItem, POSSaleReturn, POSSaleReturnItem, Purchase, StockMovement, Supplier
 
 Category = get_model("catalogue", "Category")
 Product = get_model("catalogue", "Product")
@@ -252,3 +252,16 @@ class PaymentTransactionSerializer(serializers.ModelSerializer):
             "amount", "refunded_amount", "gateway", "note", "paid_at", "created_at",
         )
         read_only_fields = fields
+
+
+class CashierShiftSerializer(serializers.ModelSerializer):
+    cashier_name = serializers.CharField(source="cashier.get_full_name", read_only=True)
+
+    class Meta:
+        model = CashierShift
+        fields = (
+            "id", "cashier", "cashier_name", "opened_at", "closed_at",
+            "opening_cash", "expected_cash", "closing_cash", "cash_difference",
+            "status", "note",
+        )
+        read_only_fields = ("id", "cashier", "cashier_name", "opened_at", "closed_at", "expected_cash", "cash_difference", "status")
