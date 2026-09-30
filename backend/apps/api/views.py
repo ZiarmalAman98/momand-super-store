@@ -367,7 +367,7 @@ class POSSaleListView(generics.ListAPIView):
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        if self.request.user.groups.filter(name="Cashier").exists() and not self.request.user.is_superuser:
+        if not (self.request.user.is_superuser or self.request.user.has_perm("mis.change_possale") or self.request.user.has_perm("mis.delete_possale")):
             queryset = queryset.filter(cashier=self.request.user)
         return queryset
 
