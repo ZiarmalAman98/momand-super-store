@@ -639,4 +639,3 @@ class CashierShift(models.Model):
 
     def __str__(self):
         return f"{self.cashier} - {self.opened_at:%Y-%m-%d %H:%M}"
-        return f"{self.cashier} - {self.opened_at:%Y-%m-%d %H:%M}"
