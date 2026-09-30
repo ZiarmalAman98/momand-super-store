@@ -5,8 +5,8 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 from oscar.test.factories import ProductFactory
 
-from .models import PaymentTransaction, POSSale, Purchase, StockMovement, Supplier
-from .services import adjust_stock, create_pos_sale, process_pos_return, receive_purchase
+from .models import CashierShift, PaymentTransaction, POSSale, Purchase, StockMovement, Supplier
+from .services import adjust_stock, close_cashier_shift, create_pos_sale, open_cashier_shift, process_pos_return, receive_purchase
 
 
 class InventoryTransactionTests(TestCase):
@@ -137,3 +137,48 @@ class InventoryTransactionTests(TestCase):
                 items=[{"sale_item_id": line.pk, "quantity": 2}],
                 refund_method=POSSale.PAYMENT_CASH, reason="Duplicate return", restocked=True,
             )
+
+    def test_cashier_shift_open_and_close_calculates_difference(self):
+        shift = open_cashier_shift(cashier=self.cashier, opening_cash="100.00")
+        self.assertEqual(shift.status, CashierShift.STATUS_OPEN)
+        self.assertEqual(shift.opening_cash, Decimal("100.00"))
+
+        sale = create_pos_sale(
+            cashier=self.cashier,
+            items=[{"product_id": self.product.pk, "quantity": 2}],
+            payment_method=POSSale.PAYMENT_CASH,
+            amount_tendered="30.00",
+        )
+        closed = close_cashier_shift(shift_id=shift.pk, closing_cash="124.00", note="End of day")
+        self.assertEqual(closed.expected_cash, sale.total + Decimal("100.00"))
+        self.assertEqual(closed.closing_cash, Decimal("124.00"))
+        self.assertEqual(closed.cash_difference, Decimal("-1.00"))
+        self.assertEqual(closed.status, CashierShift.STATUS_CLOSED)
+        self.assertIsNotNone(closed.closed_at)
+
+    def test_cashier_cannot_open_two_shifts(self):
+        open_cashier_shift(cashier=self.cashier, opening_cash="50.00")
+        with self.assertRaises(ValidationError):
+            open_cashier_shift(cashier=self.cashier, opening_cash="75.00")
+
+    def test_cash_refund_is_subtracted_from_shift_expected_cash(self):
+        shift = open_cashier_shift(cashier=self.cashier, opening_cash="100.00")
+        sale = create_pos_sale(
+            cashier=self.cashier,
+            items=[{"product_id": self.product.pk, "quantity": 2}],
+            payment_method=POSSale.PAYMENT_CASH,
+            amount_tendered="30.00",
+        )
+        line = sale.items.get()
+        returned = process_pos_return(
+            invoice_number=sale.invoice_number,
+            processed_by=self.cashier,
+            items=[{"sale_item_id": line.pk, "quantity": 1}],
+            refund_method=POSSale.PAYMENT_CASH,
+            reason="Customer return",
+            restocked=True,
+        )
+        closed = close_cashier_shift(shift_id=shift.pk, closing_cash="111.25")
+        self.assertEqual(returned.refund_total, Decimal("12.50"))
+        self.assertEqual(closed.expected_cash, Decimal("112.50"))
+
