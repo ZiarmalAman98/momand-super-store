@@ -34,14 +34,14 @@ from .serializers import (
     SupplierSerializer,
     ExpenseSerializer,
     POSSaleReturnSerializer,
-    POSSaleReturnCreateSerializer,
+    POSSaleReturnCreateSerializer,\n    POSSaleCorrectionSerializer,\n    POSSaleCorrectionCreateSerializer,
     PaymentTransactionSerializer,
     CashierShiftSerializer,
 )
 from .services import add_to_basket, get_session_basket
 from .permissions import HasMISPermission
 from apps.mis.models import CashierShift, Expense, OnlineOrderCost, PaymentTransaction, POSSale, POSSaleItem, POSSaleReturn, Purchase, StockMovement, Supplier
-from apps.mis.services import adjust_stock, close_cashier_shift, create_pos_sale, open_cashier_shift, process_pos_return, receive_purchase
+from apps.mis.services import adjust_stock, close_cashier_shift, create_pos_sale, open_cashier_shift, process_pos_return, receive_purchase\nfrom apps.mis.sale_correction_services import correct_pos_sale
 from apps.mis.accounting import financial_summary
 
 Category = get_model("catalogue", "Category")
@@ -137,7 +137,7 @@ class CurrentUserView(generics.GenericAPIView):
             "email": user.email,
             "first_name": user.first_name,
             "last_name": user.last_name,
-            "is_staff": user.is_staff,
+            "is_staff": user.is_staff,\n            "can_correct_sales": bool(user.is_staff and user.has_perm("mis.change_possale")),
         })
 
 
@@ -707,3 +707,4 @@ class FinancialReportView(APIView):
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(report)
+\n\nclass POSSaleCorrectionCreateView(APIView):\n    permission_classes = (HasMISPermission,)\n    required_permission = "mis.change_possale"\n\n    def post(self, request, invoice_number):\n        serializer = POSSaleCorrectionCreateSerializer(data=request.data)\n        serializer.is_valid(raise_exception=True)\n        try:\n            correction = correct_pos_sale(\n                invoice_number=invoice_number,\n                processed_by=request.user,\n                **serializer.validated_data,\n            )\n        except POSSale.DoesNotExist:\n            return Response({"detail": "Sale invoice was not found."}, status=404)\n        except drf_serializers.ValidationError as exc:\n            return Response(exc.detail, status=400)\n        return Response(POSSaleCorrectionSerializer(correction).data, status=201)\n
