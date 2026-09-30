@@ -3,6 +3,7 @@ from decimal import Decimal\nfrom datetime import timedelta
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from oscar.test.factories import ProductFactory
 
 from .models import CashierShift, PaymentTransaction, POSSale, Purchase, StockMovement, Supplier
@@ -12,7 +13,7 @@ from .services import adjust_stock, close_cashier_shift, create_pos_sale, open_c
 class InventoryTransactionTests(TestCase):
     def setUp(self):
         self.cashier = get_user_model().objects.create_user(username="cashier-test", password="SecurePass!12345")
-        self.product = ProductFactory(stockrecords__price=Decimal("12.50"), stockrecords__price_currency="AFN", stockrecords__num_in_stock=8)
+        self.product = ProductFactory(stockrecords__price=Decimal("12.50"), stockrecords__price_currency="AFN", stockrecords__num_in_stock=8, stockrecords__cost_price=Decimal("8.00"))
         self.record = self.product.stockrecords.get()
 
     def test_pos_sale_records_payment_and_stock_movement(self):
@@ -32,6 +33,8 @@ class InventoryTransactionTests(TestCase):
         self.assertEqual(sale.total, Decimal("25.00"))
         self.assertEqual(sale.change_due, Decimal("5.00"))
         self.assertEqual(self.record.num_in_stock, 6)
+        self.assertEqual(sale.items.first().unit_cost, Decimal("8.00"))
+        self.assertEqual(sale.items.first().cost_total, Decimal("16.00"))
         self.assertEqual(movement.quantity_delta, -2)
         self.assertEqual(movement.quantity_before, 8)
         self.assertEqual(movement.quantity_after, 6)
@@ -86,6 +89,37 @@ class InventoryTransactionTests(TestCase):
         self.assertEqual(POSSale.objects.count(), 0)
         self.assertEqual(StockMovement.objects.count(), 0)
 
+    def test_sale_requires_inventory_cost(self):
+        self.record.cost_price = None
+        self.record.save(update_fields=["cost_price"])
+        with self.assertRaises(ValidationError):
+            create_pos_sale(
+                cashier=self.cashier,
+                items=[{"product_id": self.product.pk, "quantity": 1}],
+                payment_method=POSSale.PAYMENT_CASH,
+                amount_tendered="13.75",
+            )
+        self.assertEqual(POSSale.objects.count(), 0)
+
+    def test_return_snapshots_cogs_and_restock_reverses_it(self):
+        sale = create_pos_sale(
+            cashier=self.cashier,
+            items=[{"product_id": self.product.pk, "quantity": 2}],
+            payment_method=POSSale.PAYMENT_CASH,
+            amount_tendered="30.00",
+        )
+        returned = process_pos_return(
+            invoice_number=sale.invoice_number,
+            processed_by=self.cashier,
+            items=[{"sale_item_id": sale.items.first().pk, "quantity": 1}],
+            refund_method=POSSale.PAYMENT_CASH,
+            reason="COGS return",
+            restocked=True,
+        )
+        item = returned.items.get()
+        self.assertEqual(item.unit_cost, Decimal("8.00"))
+        self.assertEqual(item.cost_total, Decimal("8.00"))
+
     def test_receiving_purchase_adds_stock_and_audits_change(self):
         supplier = Supplier.objects.create(name="Inventory Test Supplier")
         purchase = receive_purchase(
@@ -100,6 +134,7 @@ class InventoryTransactionTests(TestCase):
         self.assertEqual(purchase.total_cost, Decimal("41.25"))
         self.assertEqual(purchase.status, Purchase.STATUS_RECEIVED)
         self.assertEqual(self.record.num_in_stock, 13)
+        self.assertEqual(self.record.cost_price, Decimal("8.10"))
         self.assertEqual(movement.quantity_delta, 5)
 
     def test_pos_sale_cannot_consume_reserved_stock(self):
@@ -207,4 +242,30 @@ class InventoryTransactionTests(TestCase):
         self.assertEqual(returned.refund_total, Decimal("12.50"))
         self.assertEqual(closed.expected_cash, Decimal("112.50"))
 
-\n\nclass FinancialReportTests(TestCase):\n    def setUp(self):\n        self.cashier = get_user_model().objects.create_user(username="report-cashier", password="SecurePass!12345")\n        self.product = ProductFactory(stockrecords__price=Decimal("10.00"), stockrecords__price_currency="AFN", stockrecords__num_in_stock=20)\n        self.supplier = Supplier.objects.create(name="Report Supplier")\n\n    def test_financial_summary_includes_sales_refunds_purchases_and_expenses(self):\n        sale = create_pos_sale(\n            cashier=self.cashier,\n            items=[{"product_id": self.product.pk, "quantity": 2}],\n            payment_method=POSSale.PAYMENT_CASH,\n            amount_tendered="20.00",\n        )\n        line = sale.items.get()\n        process_pos_return(\n            invoice_number=sale.invoice_number,\n            processed_by=self.cashier,\n            items=[{"sale_item_id": line.pk, "quantity": 1}],\n            refund_method=POSSale.PAYMENT_CASH,\n            reason="Report test",\n            restocked=True,\n        )\n        receive_purchase(\n            supplier=self.supplier, reference="REPORT-INV-001", purchased_at=timezone.localdate(),\n            items=[{"product_id": self.product.pk, "quantity": 3, "unit_cost": "6.00"}],\n            created_by=self.cashier,\n        )\n        Expense.objects.create(category=Expense.CATEGORY_OTHER, description="Report expense", amount="5.00", created_by=self.cashier)\n        report = financial_summary(start_date=timezone.localdate(), end_date=timezone.localdate())\n        self.assertEqual(report["pos_sales"]["gross"], "20.00")\n        self.assertEqual(report["pos_sales"]["refunds"], "10.00")\n        self.assertEqual(report["pos_sales"]["net"], "10.00")\n        self.assertEqual(report["purchases"]["total"], "18.00")\n        self.assertEqual(report["expenses"]["total"], "5.00")\n        self.assertEqual(report["cash"]["net"], "10.00")\n        self.assertEqual(report["accounting_status"], "cogs_not_modeled")\n\n    def test_financial_summary_rejects_reversed_date_range(self):\n        today = timezone.localdate()\n        with self.assertRaises(ValueError):\n            financial_summary(start_date=today, end_date=today - timedelta(days=1))\n
+\n\nclass FinancialReportTests(TestCase):\n    def setUp(self):\n        self.cashier = get_user_model().objects.create_user(username="report-cashier", password="SecurePass!12345")\n        self.product = ProductFactory(stockrecords__price=Decimal("10.00"), stockrecords__price_currency="AFN", stockrecords__num_in_stock=20, stockrecords__cost_price=Decimal("6.00"))\n        self.supplier = Supplier.objects.create(name="Report Supplier")\n\n    def test_financial_summary_includes_sales_refunds_purchases_and_expenses(self):\n        sale = create_pos_sale(\n            cashier=self.cashier,\n            items=[{"product_id": self.product.pk, "quantity": 2}],\n            payment_method=POSSale.PAYMENT_CASH,\n            amount_tendered="20.00",\n        )\n        line = sale.items.get()\n        process_pos_return(\n            invoice_number=sale.invoice_number,\n            processed_by=self.cashier,\n            items=[{"sale_item_id": line.pk, "quantity": 1}],\n            refund_method=POSSale.PAYMENT_CASH,\n            reason="Report test",\n            restocked=True,\n        )\n        receive_purchase(\n            supplier=self.supplier, reference="REPORT-INV-001", purchased_at=timezone.localdate(),\n            items=[{"product_id": self.product.pk, "quantity": 3, "unit_cost": "6.00"}],\n            created_by=self.cashier,\n        )\n        Expense.objects.create(category=Expense.CATEGORY_OTHER, description="Report expense", amount="5.00", created_by=self.cashier)\n        report = financial_summary(start_date=timezone.localdate(), end_date=timezone.localdate())\n        self.assertEqual(report["pos_sales"]["gross"], "20.00")\n        self.assertEqual(report["pos_sales"]["refunds"], "10.00")\n        self.assertEqual(report["pos_sales"]["net"], "10.00")\n        self.assertEqual(report["purchases"]["total"], "18.00")\n        self.assertEqual(report["expenses"]["total"], "5.00")\n        self.assertEqual(report["cash"]["net"], "10.00")\n        self.assertEqual(report["accounting_status"], "cogs_modeled")\n\n    def test_financial_summary_calculates_cogs_and_profit(self):
+        sale = create_pos_sale(
+            cashier=self.cashier,
+            items=[{"product_id": self.product.pk, "quantity": 2}],
+            payment_method=POSSale.PAYMENT_CASH,
+            amount_tendered="20.00",
+        )
+        process_pos_return(
+            invoice_number=sale.invoice_number,
+            processed_by=self.cashier,
+            items=[{"sale_item_id": sale.items.first().pk, "quantity": 1}],
+            refund_method=POSSale.PAYMENT_CASH,
+            reason="Profit test",
+            restocked=True,
+        )
+        report = financial_summary(
+            start_date=timezone.localdate(),
+            end_date=timezone.localdate(),
+        )
+        self.assertEqual(report["cogs"]["pos"], "12.00")
+        self.assertEqual(report["cogs"]["returned_restocked"], "6.00")
+        self.assertEqual(report["cogs"]["net"], "6.00")
+        self.assertEqual(report["profit"]["gross"], "4.00")
+        self.assertEqual(report["profit"]["net"], "4.00")
+        self.assertEqual(report["accounting_status"], "cogs_modeled")
+
+    def test_financial_summary_rejects_reversed_date_range(self):\n        today = timezone.localdate()\n        with self.assertRaises(ValueError):\n            financial_summary(start_date=today, end_date=today - timedelta(days=1))\n

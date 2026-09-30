@@ -1,10 +1,19 @@
 from decimal import Decimal
 from datetime import datetime, time
 
-from django.conf import settings\nfrom django.db.models import Count, Sum
+from django.conf import settings
+from django.db.models import Count, Sum
 from django.utils import timezone
 
-from apps.mis.models import Expense, PaymentTransaction, POSSale, POSSaleReturn, Purchase
+from apps.mis.models import (
+    Expense,
+    OnlineOrderCost,
+    PaymentTransaction,
+    POSSale,
+    POSSaleReturn,
+    POSSaleReturnItem,
+    Purchase,
+)
 from oscar.core.loading import get_model
 
 Order = get_model("order", "Order")
@@ -40,10 +49,43 @@ def financial_summary(*, start_date=None, end_date=None):
     )
     expenses = Expense.objects.filter(spent_at__gte=start_date, spent_at__lte=end_date)
 
-    pos_gross = _money(pos_sales.aggregate(value=Sum("total"))["value"])
-    pos_refunds = _money(pos_returns.aggregate(value=Sum("refund_total"))["value"])
-    pos_net = pos_gross - pos_refunds
-    online_gross = _money(online_orders.aggregate(value=Sum("total_incl_tax"))["value"])
+    # Revenue is reported before sales tax because tax collected is a liability,
+    # not store revenue. Refunds are reduced by their pre-tax merchandise value.
+    pos_revenue = _money(pos_sales.aggregate(value=Sum("subtotal"))["value"])
+    # Return revenue is reconstructed from the original pre-tax unit price
+    # multiplied by the returned quantity.
+    pos_refund_revenue = Decimal("0.00")
+    for row in POSSaleReturnItem.objects.filter(
+        sale_return__created_at__range=(start_dt, end_dt)
+    ).values("sale_item__unit_price", "quantity"):
+        pos_refund_revenue += (
+            row["sale_item__unit_price"] or Decimal("0.00")
+        ) * row["quantity"]
+    pos_net_revenue = pos_revenue - pos_refund_revenue
+
+    online_revenue = _money(
+        online_orders.aggregate(value=Sum("total_excl_tax"))["value"]
+    )
+
+    from apps.mis.models import POSSaleItem
+    pos_cogs = _money(
+        POSSaleItem.objects.filter(
+            sale__created_at__range=(start_dt, end_dt)
+        ).aggregate(value=Sum("cost_total"))["value"]
+    )
+    returned_cogs = _money(
+        POSSaleReturnItem.objects.filter(
+            sale_return__created_at__range=(start_dt, end_dt),
+            sale_return__restocked=True,
+        ).aggregate(value=Sum("cost_total"))["value"]
+    )
+    online_cogs = _money(
+        OnlineOrderCost.objects.filter(
+            order__date_placed__range=(start_dt, end_dt)
+        ).aggregate(value=Sum("cost_total"))["value"]
+    )
+    cogs = pos_cogs - returned_cogs + online_cogs
+
     purchase_total = _money(purchases.aggregate(value=Sum("total_cost"))["value"])
     expense_total = _money(expenses.aggregate(value=Sum("amount"))["value"])
 
@@ -56,27 +98,92 @@ def financial_summary(*, start_date=None, end_date=None):
         status=PaymentTransaction.STATUS_REFUNDED,
     )
     payment_breakdown = []
-    for row in paid.values("method").annotate(count=Count("id"), amount=Sum("amount")).order_by("method"):
+    for row in paid.values("method").annotate(
+        count=Count("id"), amount=Sum("amount")
+    ).order_by("method"):
         payment_breakdown.append({
             "method": row["method"],
             "count": row["count"],
             "amount": str(_money(row["amount"])),
         })
 
-    cash_collected = _money(paid.filter(method=PaymentTransaction.METHOD_CASH).aggregate(value=Sum("amount"))["value"])
-    cash_refunded = _money(refunded.filter(method=PaymentTransaction.METHOD_CASH).aggregate(value=Sum("refunded_amount"))["value"])
+    cash_collected = _money(
+        paid.filter(method=PaymentTransaction.METHOD_CASH)
+        .aggregate(value=Sum("amount"))["value"]
+    )
+    cash_refunded = _money(
+        refunded.filter(method=PaymentTransaction.METHOD_CASH)
+        .aggregate(value=Sum("refunded_amount"))["value"]
+    )
+
+    missing_pos_cost_lines = POSSaleItem.objects.filter(
+        sale__created_at__range=(start_dt, end_dt),
+        unit_cost__isnull=True,
+    ).count()
+    gross_profit = pos_net_revenue + online_revenue - cogs
+    net_profit = gross_profit - expense_total
 
     return {
         "start_date": start_date.isoformat(),
         "end_date": end_date.isoformat(),
         "currency": getattr(settings, "OSCAR_DEFAULT_CURRENCY", "AFN"),
-        "pos_sales": {"transactions": pos_sales.count(), "gross": str(pos_gross), "refunds": str(pos_refunds), "net": str(pos_net)},
-        "online_sales": {"orders": online_orders.count(), "gross": str(online_gross)},
-        "revenue": {"gross": str(pos_gross + online_gross), "refunds": str(pos_refunds), "net": str(pos_net + online_gross)},
-        "purchases": {"transactions": purchases.count(), "total": str(purchase_total)},
-        "expenses": {"transactions": expenses.count(), "total": str(expense_total)},
-        "cash": {"collected": str(cash_collected), "refunded": str(cash_refunded), "net": str(cash_collected - cash_refunded)},
+        "pos_sales": {
+            "transactions": pos_sales.count(),
+            "gross": str(_money(pos_sales.aggregate(value=Sum("total"))["value"])),
+            "gross_ex_tax": str(pos_revenue),
+            "refunds": str(_money(pos_returns.aggregate(value=Sum("refund_total"))["value"])),
+            "refunds_ex_tax": str(pos_refund_revenue),
+            "net": str(_money(pos_sales.aggregate(value=Sum("total"))["value"]) - _money(pos_returns.aggregate(value=Sum("refund_total"))["value"])),
+            "net_ex_tax": str(pos_net_revenue),
+        },
+        "online_sales": {
+            "orders": online_orders.count(),
+            "gross": str(_money(online_orders.aggregate(value=Sum("total_incl_tax"))["value"])),
+            "gross_ex_tax": str(online_revenue),
+        },
+        "revenue": {
+            "gross_including_tax": str(
+                _money(pos_sales.aggregate(value=Sum("total"))["value"])
+                + _money(online_orders.aggregate(value=Sum("total_incl_tax"))["value"])
+            ),
+            "net_ex_tax": str(pos_net_revenue + online_revenue),
+        },
+        "cogs": {
+            "pos": str(pos_cogs),
+            "returned_restocked": str(returned_cogs),
+            "online": str(online_cogs),
+            "net": str(cogs),
+            "missing_pos_cost_lines": missing_pos_cost_lines,
+        },
+        "profit": {
+            "gross": str(gross_profit),
+            "net": str(net_profit),
+            "formula": "net revenue excluding tax - COGS - operating expenses",
+        },
+        "purchases": {
+            "transactions": purchases.count(),
+            "total": str(purchase_total),
+        },
+        "expenses": {
+            "transactions": expenses.count(),
+            "total": str(expense_total),
+        },
+        "cash": {
+            "collected": str(cash_collected),
+            "refunded": str(cash_refunded),
+            "net": str(cash_collected - cash_refunded),
+        },
         "payment_breakdown": payment_breakdown,
-        "accounting_status": "cogs_not_modeled",
-        "accounting_note": "Gross profit and net profit are not calculated yet because historical cost-of-goods-sold is not modeled in the sale records.",
+        "accounting_status": (
+            "historical_cost_data_required"
+            if missing_pos_cost_lines
+            else "cogs_modeled"
+        ),
+        "accounting_note": (
+            "New POS and online sales snapshot inventory cost at sale time. "
+            "Historical POS lines without a stored unit cost are excluded from "
+            "COGS and must be reconciled before relying on profit for those dates."
+            if missing_pos_cost_lines
+            else "COGS uses sale-time inventory cost snapshots and weighted-average stock cost."
+        ),
     }

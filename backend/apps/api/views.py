@@ -40,7 +40,7 @@ from .serializers import (
 )
 from .services import add_to_basket, get_session_basket
 from .permissions import HasMISPermission
-from apps.mis.models import CashierShift, Expense, PaymentTransaction, POSSale, POSSaleItem, POSSaleReturn, Purchase, StockMovement, Supplier
+from apps.mis.models import CashierShift, Expense, OnlineOrderCost, PaymentTransaction, POSSale, POSSaleItem, POSSaleReturn, Purchase, StockMovement, Supplier
 from apps.mis.services import adjust_stock, close_cashier_shift, create_pos_sale, open_cashier_shift, process_pos_return, receive_purchase\nfrom apps.mis.accounting import financial_summary
 
 Category = get_model("catalogue", "Category")
@@ -298,8 +298,24 @@ class CheckoutView(APIView):
                     request=request,
                 )
 
-                # Oscar creates the order, but this custom store owns the physical
-                # inventory ledger. Deduct stock while the same row locks are held.
+                # Oscar creates the order, while this custom ledger snapshots
+                # the inventory cost used for COGS before stock is deducted.
+                for line in basket_lines:
+                    record = locked_records[line.stockrecord_id]
+                    if record.cost_price is None:
+                        raise ValidationError(
+                            f"Set an inventory cost for {line.product.get_title()} before online sale."
+                        )
+                    OnlineOrderCost.objects.create(
+                        order=order,
+                        product=line.product,
+                        stockrecord=record,
+                        quantity=line.quantity,
+                        unit_cost=record.cost_price,
+                        cost_total=record.cost_price * line.quantity,
+                    )
+
+                # Deduct physical stock while the same row locks are held.
                 for line in basket_lines:
                     record = locked_records[line.stockrecord_id]
                     if record.num_in_stock is not None:

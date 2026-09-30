@@ -7,7 +7,7 @@ from django.db.models import Q, Sum
 from django.utils import timezone
 from oscar.core.loading import get_model
 
-from .models import CashierShift, PaymentTransaction, POSSale, POSSaleItem, POSSaleReturn, POSSaleReturnItem, Purchase, PurchaseItem, StockMovement
+from .models import CashierShift, PaymentTransaction, POSSale, POSSaleItem, POSSaleReturn, POSSaleReturnItem, OnlineOrderCost, Purchase, PurchaseItem, StockMovement
 
 Product = get_model("catalogue", "Product")
 StockRecord = get_model("partner", "StockRecord")
@@ -192,6 +192,8 @@ def create_pos_sale(*, cashier, items, payment_method=None, amount_tendered=None
             paid_at=timezone.now(),
         )
     for product, record, quantity, price, line_total in prepared:
+        if record.cost_price is None:
+            raise ValidationError({"items": f"Set an inventory cost for {product.get_title()} before selling it."})
         before = max(0, record.net_stock_level or 0)
         if record.num_in_stock is None or record.num_in_stock < (record.num_allocated or 0) + quantity:
             raise ValidationError({"items": f"Only {before} units of {product.get_title()} are available."})
@@ -201,6 +203,7 @@ def create_pos_sale(*, cashier, items, payment_method=None, amount_tendered=None
             sale=sale, product=product, stockrecord=record,
             title=product.get_title(), sku=product.upc or "", quantity=quantity,
             unit_price=price, unit_tax=line_taxes[record.pk], line_total=line_total,
+            unit_cost=record.cost_price, cost_total=record.cost_price * quantity,
         )
         StockMovement.objects.create(
             stockrecord=record, movement_type=StockMovement.TYPE_POS_SALE,
@@ -264,6 +267,7 @@ def process_pos_return(*, invoice_number, processed_by, items, refund_method, re
         POSSaleReturnItem.objects.create(
             sale_return=sale_return, sale_item=line,
             quantity=quantity, refund_amount=amount,
+            unit_cost=line.unit_cost, cost_total=(line.unit_cost or Decimal("0.00")) * quantity,
         )
         if restocked:
             record = locked_return_records[line.stockrecord_id]
@@ -327,8 +331,16 @@ def receive_purchase(*, supplier, reference, purchased_at, items, created_by, no
     )
     for product, record, quantity, unit_cost, line_total in prepared:
         before = max(0, record.net_stock_level or 0) if record.num_in_stock is not None else 0
-        record.num_in_stock = (record.num_in_stock or 0) + quantity
-        record.save(update_fields=["num_in_stock"])
+        old_stock = record.num_in_stock or 0
+        old_cost = record.cost_price
+        record.num_in_stock = old_stock + quantity
+        if old_cost is None or old_stock <= 0:
+            record.cost_price = unit_cost
+        else:
+            record.cost_price = (
+                (old_cost * old_stock) + (unit_cost * quantity)
+            ) / (old_stock + quantity)
+        record.save(update_fields=["num_in_stock", "cost_price"])
         PurchaseItem.objects.create(
             purchase=purchase, product=product, stockrecord=record,
             quantity=quantity, unit_cost=unit_cost, line_total=line_total,

@@ -260,6 +260,19 @@ class POSSaleItem(models.Model):
         decimal_places=2,
         validators=[MinValueValidator(Decimal("0.00"))],
     )
+    unit_cost = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("0.00"))],
+    )
+    cost_total = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+    )
 
     class Meta:
         indexes = [
@@ -343,6 +356,19 @@ class POSSaleReturnItem(models.Model):
         decimal_places=2,
         validators=[MinValueValidator(Decimal("0.00"))],
     )
+    unit_cost = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("0.00"))],
+    )
+    cost_total = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+    )
 
     class Meta:
         indexes = [
@@ -359,6 +385,58 @@ class POSSaleReturnItem(models.Model):
                 name="mis_pos_return_item_amount_nonnegative",
             ),
         ]
+
+
+class OnlineOrderCost(models.Model):
+    order = models.ForeignKey(
+        "order.Order",
+        on_delete=models.PROTECT,
+        related_name="mis_cost_lines",
+    )
+    product = models.ForeignKey(
+        "catalogue.Product",
+        on_delete=models.PROTECT,
+        related_name="online_order_costs",
+    )
+    stockrecord = models.ForeignKey(
+        "partner.StockRecord",
+        on_delete=models.PROTECT,
+        related_name="online_order_costs",
+    )
+    quantity = models.PositiveIntegerField(
+        validators=[MinValueValidator(1)]
+    )
+    unit_cost = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.00"))],
+    )
+    cost_total = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.00"))],
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["order", "product"], name="mis_online_order_product_idx"),
+            models.Index(fields=["stockrecord", "created_at"], name="mis_online_cost_stock_created_idx"),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(quantity__gt=0),
+                name="mis_online_cost_qty_positive",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(unit_cost__gte=0) & models.Q(cost_total__gte=0),
+                name="mis_online_cost_amounts_nonnegative",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.order.number}:{self.product.get_title()}"
 
 
 class StockMovement(models.Model):
