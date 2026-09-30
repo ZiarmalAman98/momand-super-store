@@ -422,7 +422,7 @@ class OnlineOrderCost(models.Model):
         ordering = ["-created_at", "-id"]
         indexes = [
             models.Index(fields=["order", "product"], name="mis_online_order_product_idx"),
-            models.Index(fields=["stockrecord", "created_at"], name="mis_online_cost_stock_created_idx"),
+            models.Index(fields=["stockrecord", "created_at"], name="mis_online_cost_stock_created"),
         ]
         constraints = [
             models.CheckConstraint(
