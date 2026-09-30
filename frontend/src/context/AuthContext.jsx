@@ -8,15 +8,27 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [ready, setReady] = useState(false)
 
-  useEffect(() => {
-    api.me().then(setUser).catch(() => setUser(null)).finally(() => setReady(true))
-  }, [])
+  async function loadUser() {
+    try {
+      const me = await api.me()
+      const access = await api.access()
+      setUser({ ...me, permissions: access.menus, permission_codes: access.permissions })
+    } catch {
+      setUser(null)
+    } finally {
+      setReady(true)
+    }
+  }
+
+  useEffect(() => { loadUser() }, [])
 
   async function login(email, password) {
     const result = await api.login(email, password)
     setAccessToken(result.access)
-    setUser(result.user)
-    return result.user
+    const access = await api.access()
+    const nextUser = { ...result.user, permissions: access.menus, permission_codes: access.permissions }
+    setUser(nextUser)
+    return nextUser
   }
 
   async function register(payload) {
