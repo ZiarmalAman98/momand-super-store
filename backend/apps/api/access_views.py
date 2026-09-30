@@ -31,6 +31,9 @@ PERMISSIONS = [
     ("catalogue.add_product", "Products: add"),
     ("catalogue.change_product", "Products: edit"),
     ("catalogue.delete_product", "Products: delete"),
+    ("auth.view_user", "Users: view"),
+    ("auth.add_user", "Users: create"),
+    ("auth.change_user", "Users: edit/disable"),
 ]
 
 MENU_RULES = {
