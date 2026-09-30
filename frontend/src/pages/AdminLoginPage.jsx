@@ -23,7 +23,7 @@ export default function AdminLoginPage() {
       }
       navigate('/admin/dashboard', { replace: true })
     } catch (err) {
-      setError(err.message || err.data?.detail || 'Admin email or password is incorrect.')
+      setError(err.data?.detail || err.message || 'Admin email or password is incorrect.')
     } finally {
       setBusy(false)
     }
