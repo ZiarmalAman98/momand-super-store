@@ -41,6 +41,7 @@ from apps.mis.services import adjust_stock, create_pos_sale, process_pos_return,
 
 Category = get_model("catalogue", "Category")
 Product = get_model("catalogue", "Product")
+StockRecord = get_model("partner", "StockRecord")
 Order = get_model("order", "Order")
 ShippingAddress = get_model("order", "ShippingAddress")
 Country = get_model("address", "Country")
@@ -249,7 +250,7 @@ class CheckoutView(APIView):
                 stockrecord_ids = sorted({line.stockrecord_id for line in basket_lines})
                 locked_records = {
                     record.pk: record
-                    for record in line.stockrecord.__class__.objects.select_for_update().filter(
+                    for record in StockRecord.objects.select_for_update().filter(
                         pk__in=stockrecord_ids
                     ).order_by("pk")
                 }
