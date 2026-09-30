@@ -172,13 +172,21 @@ class POSSaleItemSerializer(serializers.ModelSerializer):
         return item.quantity - self.get_returned_quantity(item)
 
 
+class POSSalePaymentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PaymentTransaction
+        fields = ("transaction_ref", "method", "status", "amount", "refunded_amount", "gateway", "paid_at")
+        read_only_fields = fields
+
+
 class POSSaleSerializer(serializers.ModelSerializer):
     items = POSSaleItemSerializer(many=True, read_only=True)
+    payments = POSSalePaymentSerializer(source="payment_transactions", many=True, read_only=True)
     cashier_name = serializers.CharField(source="cashier.get_full_name", read_only=True)
 
     class Meta:
         model = POSSale
-        fields = ("invoice_number", "created_at", "cashier_name", "currency", "subtotal", "discount", "tax", "total", "payment_method", "amount_tendered", "change_due", "items")
+        fields = ("invoice_number", "created_at", "cashier_name", "currency", "subtotal", "discount", "tax", "total", "payment_method", "amount_tendered", "change_due", "payments", "items")
 
 
 class POSSaleReturnItemSerializer(serializers.ModelSerializer):

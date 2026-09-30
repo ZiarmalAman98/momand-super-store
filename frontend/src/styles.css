@@ -170,7 +170,7 @@ html[dir="rtl"] .cart-line { direction: rtl; }
 .thermal-receipt header,.thermal-receipt footer { display:grid; justify-items:center; text-align:center; }
 .thermal-receipt header strong { font-size:16px; }.thermal-receipt hr { border:0; border-top:1px dashed #555; margin:12px 0; }
 .receipt-columns { display:grid; grid-template-columns:minmax(0,1fr) 28px auto; gap:8px; margin:5px 0; }
-.receipt-columns span:first-child { overflow-wrap:anywhere; }.receipt-total { display:flex; justify-content:space-between; font-size:14px; }
+.receipt-columns span:first-child { overflow-wrap:anywhere; }.receipt-total { display:flex; justify-content:space-between; font-size:14px; }.receipt-payment { display:flex; justify-content:space-between; gap:10px; padding-left:8px; font-size:11px; }
 .thermal-receipt footer { margin-top:22px; }
 @media print { @page { size: var(--receipt-width) auto; margin:0; } body { background:#fff!important; } .site-header,.site-footer,.receipt-controls,.page-title-row,.orders-back { display:none!important; } .receipt-page { width:var(--receipt-width)!important; margin:0!important; padding:0!important; } .thermal-receipt { width:var(--receipt-width)!important; max-width:none!important; margin:0!important; padding:4mm 3mm!important; border:0!important; } }
 @media print { @page receipt58 { size:58mm auto; margin:0; } @page receipt80 { size:80mm auto; margin:0; } .receipt-page[data-width="58"] { page:receipt58; } .receipt-page[data-width="80"] { page:receipt80; } }
