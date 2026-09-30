@@ -410,6 +410,16 @@ class POSSaleReturnListView(generics.ListAPIView):
     queryset = POSSaleReturn.objects.select_related("sale", "processed_by").prefetch_related("items")
 
 
+class PaymentTransactionListView(generics.ListAPIView):
+    permission_classes = (HasMISPermission,)
+    required_permission = "mis.view_paymenttransaction"
+    serializer_class = PaymentTransactionSerializer
+    queryset = PaymentTransaction.objects.select_related("sale", "order", "created_by").all()
+    filterset_fields = ("method", "status", "gateway")
+    ordering_fields = ("created_at", "amount")
+    ordering = ("-created_at",)
+
+
 class SupplierViewSet(viewsets.ModelViewSet):
     serializer_class = SupplierSerializer
     queryset = Supplier.objects.all()
