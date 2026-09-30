@@ -635,30 +635,4 @@ class CashierShift(models.Model):
 
     def __str__(self):
         return f"{self.cashier} - {self.opened_at:%Y-%m-%d %H:%M}"
-
-
-class CashierShift(models.Model):
-    STATUS_OPEN = "open"
-    STATUS_CLOSED = "closed"
-    STATUS_CHOICES = [(STATUS_OPEN, "Open"), (STATUS_CLOSED, "Closed")]
-    cashier = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="cashier_shifts")
-    opened_at = models.DateTimeField(default=timezone.now)
-    closed_at = models.DateTimeField(null=True, blank=True)
-    opening_cash = models.DecimalField(max_digits=14, decimal_places=2, validators=[MinValueValidator(Decimal("0.00"))])
-    expected_cash = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"), validators=[MinValueValidator(Decimal("0.00"))])
-    closing_cash = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(Decimal("0.00"))])
-    cash_difference = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=STATUS_OPEN, db_index=True)
-    note = models.CharField(max_length=240, blank=True)
-
-    class Meta:
-        ordering = ["-opened_at", "-id"]
-        indexes = [models.Index(fields=["cashier", "status"]), models.Index(fields=["opened_at", "status"])]
-        constraints = [
-            models.CheckConstraint(condition=models.Q(opening_cash__gte=0), name="mis_shift_opening_nonnegative"),
-            models.CheckConstraint(condition=models.Q(expected_cash__gte=0), name="mis_shift_expected_nonnegative"),
-            models.CheckConstraint(condition=models.Q(closing_cash__gte=0) | models.Q(closing_cash__isnull=True), name="mis_shift_closing_nonnegative"),
-        ]
-
-    def __str__(self):
         return f"{self.cashier} - {self.opened_at:%Y-%m-%d %H:%M}"
