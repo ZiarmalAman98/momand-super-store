@@ -1,5 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import StoreLayout from './layouts/StoreLayout'
+import AdminLayout from './layouts/AdminLayout'
+import AdminLoginPage from './pages/AdminLoginPage'
 import AboutPage from './pages/AboutPage'
 import AccountPage from './pages/AccountPage'
 import CartPage from './pages/CartPage'
@@ -56,6 +58,25 @@ export default function App() {
     <Route path="orders" element={<OrdersPage />} />
     <Route path="orders/:number/receipt" element={<ReceiptPage />} />
     <Route path="welcome" element={<Navigate to="/" replace />} />
+  </Route>
+  <Route path="/admin/login" element={<AdminLoginPage />} />
+  <Route path="/admin" element={<AdminLayout />}>
+    <Route index element={<Navigate to="dashboard" replace />} />
+    <Route path="dashboard" element={<DashboardPage />} />
+    <Route path="pos" element={<POSPage />} />
+    <Route path="pos/sales" element={<POSSalesPage />} />
+    <Route path="pos/returns" element={<POSReturnsPage />} />
+    <Route path="pos/sales/:invoice" element={<POSReceiptPage />} />
+    <Route path="inventory" element={<InventoryPage />} />
+    <Route path="purchases" element={<PurchasesPage />} />
+    <Route path="suppliers" element={<SuppliersPage />} />
+    <Route path="expenses" element={<ExpensesPage />} />
+    <Route path="sales" element={<POSSalesPage />} />
+    <Route path="reports" element={<DashboardPage />} />
+    <Route path="customers" element={<AccountPage />} />
+    <Route path="payments" element={<DashboardPage />} />
+  </Route>
+  <Route path="*" element={<NotFound />} />
     <Route path="*" element={<NotFound />} />
   </Route></Routes>
 }
