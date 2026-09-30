@@ -39,7 +39,6 @@ from .views import (
     CashierShiftCloseView,
     POSSaleReturnCreateView,
     POSSaleReturnListView,
-    POSSaleCorrectionCreateView,
 )
 
 router = DefaultRouter()
@@ -62,7 +61,6 @@ urlpatterns = [
     path("pos/sales/create/", POSSaleCreateView.as_view(), name="api-pos-sale-create"),
     path("pos/sales/<str:invoice_number>/", POSSaleDetailView.as_view(), name="api-pos-sale-detail"),
     path("pos/sales/<str:invoice_number>/returns/", POSSaleReturnCreateView.as_view(), name="api-pos-sale-return"),
-    path("pos/sales/<str:invoice_number>/correction/", POSSaleCorrectionCreateView.as_view(), name="api-pos-sale-correction"),
     path("pos/returns/", POSSaleReturnListView.as_view(), name="api-pos-returns"),
     path("payments/transactions/", PaymentTransactionListView.as_view(), name="api-payment-transactions"),
     path("pos/shifts/", CashierShiftListCreateView.as_view(), name="api-cashier-shifts"),
