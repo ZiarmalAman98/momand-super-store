@@ -24,7 +24,7 @@ EMAIL_BACKEND = env.str(
     default='django.core.mail.backends.console.EmailBackend' if DEBUG else 'django.core.mail.backends.smtp.EmailBackend',
 )
 DEFAULT_FROM_EMAIL = env.str('DEFAULT_FROM_EMAIL', default='no-reply@momand-store.local')
-FRONTEND_URL = env.str('FRONTEND_URL', default='http://localhost:5173')
+FRONTEND_URL = env.str('FRONTEND_URL', default='http://127.0.0.1:5174')
 
 database_engine = os.environ.get('DATABASE_ENGINE', 'django.db.backends.sqlite3')
 database_name = os.environ.get('DATABASE_NAME', location('db.sqlite'))
@@ -57,22 +57,15 @@ else:
     CACHES = {'default': env.cache(default='locmemcache://')}
 
 
-# Local time zone for this installation. Choices can be found here:
-# http://en.wikipedia.org/wiki/List_of_tz_zones_by_name
-# although not all choices may be available on all operating systems.
-# On Unix systems, a value of None will cause Django to use the same
-# timezone as the operating system.
+# Local time zone for this installation.
 USE_TZ = True
 TIME_ZONE = 'Europe/London'
 
 TEST_RUNNER = 'django.test.runner.DiscoverRunner'
 
-# Language code for this installation. All choices can be found here:
-# http://www.i18nguy.com/unicode/language-identifiers.html
+# Language code for this installation.
 LANGUAGE_CODE = 'en-gb'
 
-# Includes all languages that have >50% coverage in Transifex
-# Taken from Django's default setting for LANGUAGES
 gettext_noop = lambda s: s
 LANGUAGES = (
     ('ar', gettext_noop('Arabic')),
@@ -99,22 +92,10 @@ LANGUAGES = (
 )
 
 SITE_ID = 1
-
-# If you set this to False, Django will make some optimizations so as not
-# to load the internationalization machinery.
 USE_I18N = True
-
-# If you set this to False, Django will not format dates, numbers and
-# calendars according to the current locale
 USE_L10N = True
 
-# Absolute path to the directory that holds media.
-# Example: "/home/media/media.lawrence.com/"
 MEDIA_ROOT = location("public/media")
-
-# URL that handles the media served from MEDIA_ROOT. Make sure to use a
-# trailing slash if there is a path component (optional in other cases).
-# Examples: "http://media.lawrence.com", "http://example.com/media/"
 MEDIA_URL = '/media/'
 
 STATIC_URL = '/static/'
@@ -136,11 +117,8 @@ STORAGES = {
     },
 }
 
-# Default primary key field type
-# https://docs.djangoproject.com/en/dev/ref/settings/#default-auto-field
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Make this unique, and don't share it with anybody.
 SECRET_KEY = env.str('SECRET_KEY', default='django-insecure-local-development-only-change-this-key')
 if not DEBUG and SECRET_KEY.startswith('django-insecure-local-'):
     from django.core.exceptions import ImproperlyConfigured
@@ -149,9 +127,7 @@ if not DEBUG and SECRET_KEY.startswith('django-insecure-local-'):
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [
-            location('templates'),
-        ],
+        'DIRS': [location('templates')],
         'OPTIONS': {
             'loaders': [
                 'django.template.loaders.filesystem.Loader',
@@ -165,8 +141,6 @@ TEMPLATES = [
                 'django.template.context_processors.media',
                 'django.template.context_processors.static',
                 'django.contrib.messages.context_processors.messages',
-
-                # Oscar specific
                 'oscar.apps.search.context_processors.search_form',
                 'oscar.apps.communication.notifications.context_processors.notifications',
                 'oscar.apps.checkout.context_processors.checkout',
@@ -181,31 +155,36 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'corsheaders.middleware.CorsMiddleware',
-
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.contrib.flatpages.middleware.FlatpageFallbackMiddleware',
-
-    # Allow languages to be selected
     'django.middleware.locale.LocaleMiddleware',
     'django.middleware.http.ConditionalGetMiddleware',
     'django.middleware.common.CommonMiddleware',
-
-    # Ensure a valid basket is added to the request instance for every request
     'oscar.apps.basket.middleware.BasketMiddleware',
 ]
 
 CORS_ALLOWED_ORIGINS = env.list(
     'CORS_ALLOWED_ORIGINS',
-    default=['http://localhost:5173', 'http://127.0.0.1:5173'],
+    default=[
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+        'http://localhost:5174',
+        'http://127.0.0.1:5174',
+    ],
 )
 CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = env.list(
     'CSRF_TRUSTED_ORIGINS',
-    default=['http://localhost:5173', 'http://127.0.0.1:5173'],
+    default=[
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+        'http://localhost:5174',
+        'http://127.0.0.1:5174',
+    ],
 )
 
 REST_FRAMEWORK = {
@@ -251,12 +230,6 @@ SIMPLE_JWT = {
 
 ROOT_URLCONF = 'urls'
 
-
-# A sample logging configuration. The only tangible logging
-# performed by this configuration is to send an email to
-# the site admins on every HTTP 500 error.
-# See http://docs.djangoproject.com/en/dev/topics/logging for
-# more details on how to customize your logging configuration.
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': True,
@@ -298,8 +271,6 @@ LOGGING = {
             'level': 'INFO',
             'propagate': False,
         },
-
-        # Django loggers
         'django': {
             'handlers': ['null'],
             'propagate': True,
@@ -318,8 +289,6 @@ LOGGING = {
             'handlers': ['null'],
             'propagate': False,
         },
-
-        # Third party
         'raven': {
             'level': 'DEBUG',
             'handlers': ['console'],
@@ -333,7 +302,6 @@ LOGGING = {
     }
 }
 
-
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -343,8 +311,6 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'django.contrib.sites',
     'django.contrib.flatpages',
-
-    # Store management information system
     'apps.mis.apps.MisConfig',
     'apps.storefront.apps.StorefrontConfig',
     'backend.apps.api.apps.StoreApiConfig',
@@ -352,7 +318,6 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt.token_blacklist',
     'django_filters',
     'corsheaders',
-
     'oscar.config.Shop',
     'oscar.apps.analytics.apps.AnalyticsConfig',
     'oscar.apps.checkout.apps.CheckoutConfig',
@@ -383,20 +348,14 @@ INSTALLED_APPS = [
     'oscar.apps.dashboard.vouchers.apps.VouchersDashboardConfig',
     'oscar.apps.dashboard.communications.apps.CommunicationsDashboardConfig',
     'oscar.apps.dashboard.shipping.apps.ShippingDashboardConfig',
-
-    # 3rd-party apps that Oscar depends on
     'widget_tweaks',
     'haystack',
     'treebeard',
     'sorl.thumbnail',
     'django_tables2',
-
-    # Django apps that the sandbox depends on
     'django.contrib.sitemaps',
 ]
 
-# Add Oscar's custom auth backend so users can sign in using their email
-# address.
 AUTHENTICATION_BACKENDS = (
     'oscar.apps.customer.auth_backends.EmailBackend',
     'django.contrib.auth.backends.ModelBackend',
@@ -405,9 +364,7 @@ AUTHENTICATION_BACKENDS = (
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-        'OPTIONS': {
-            'min_length': 9,
-        }
+        'OPTIONS': {'min_length': 9},
     },
     {
         'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
@@ -417,10 +374,6 @@ AUTH_PASSWORD_VALIDATORS = [
 LOGIN_REDIRECT_URL = '/'
 APPEND_SLASH = True
 
-# ====================
-# Messages contrib app
-# ====================
-
 from django.contrib.messages import constants as messages
 MESSAGE_TAGS = {
     messages.ERROR: 'danger'
@@ -428,7 +381,6 @@ MESSAGE_TAGS = {
 
 HAYSTACK_SIGNAL_PROCESSOR = 'haystack.signals.RealtimeSignalProcessor'
 
-# Woosh settings
 HAYSTACK_CONNECTIONS = {
     'default': {
         'ENGINE': 'haystack.backends.whoosh_backend.WhooshEngine',
@@ -437,30 +389,9 @@ HAYSTACK_CONNECTIONS = {
     },
 }
 
-# Here's a sample Haystack config for Solr 6.x (which is recommended)
-# HAYSTACK_CONNECTIONS = {
-#     'default': {
-#         'ENGINE': 'haystack.backends.solr_backend.SolrEngine',
-#         'URL': 'http://127.0.0.1:8983/solr/sandbox',
-#         'ADMIN_URL': 'http://127.0.0.1:8983/solr/admin/cores',
-#         'INCLUDE_SPELLING': True,
-#     }
-# }
-
-# =============
-# Debug Toolbar
-# =============
-
 INTERNAL_IPS = ['127.0.0.1', '::1']
 
-# ==============
-# Oscar settings
-# ==============
-
 from oscar.defaults import *
-
-# Meta
-# ====
 
 OSCAR_SHOP_NAME = env.str('STORE_NAME', default='Momand Super Store')
 OSCAR_SHOP_TAGLINE = env.str('STORE_TAGLINE', default='Your trusted store for quality products.')
@@ -473,17 +404,9 @@ STORE_ADDRESS = env.str('STORE_ADDRESS', default='')
 OSCAR_RECENTLY_VIEWED_PRODUCTS = 20
 OSCAR_ALLOW_ANON_CHECKOUT = True
 
-
-# Order processing
-# ================
-
-# Sample order/line status settings. This is quite simplistic. It's like you'll
-# want to override the set_status method on the order object to do more
-# sophisticated things.
 OSCAR_INITIAL_ORDER_STATUS = 'Pending'
 OSCAR_INITIAL_LINE_STATUS = 'Pending'
 
-# This dict defines the new order statuses than an order can move to
 OSCAR_ORDER_STATUS_PIPELINE = {
     'Pending': ('Being processed', 'Cancelled',),
     'Being processed': ('Complete', 'Cancelled',),
@@ -491,16 +414,11 @@ OSCAR_ORDER_STATUS_PIPELINE = {
     'Complete': (),
 }
 
-# This dict defines the line statuses that will be set when an order's status
-# is changed
 OSCAR_ORDER_STATUS_CASCADE = {
     'Being processed': 'Being processed',
     'Cancelled': 'Cancelled',
     'Complete': 'Shipped',
 }
-
-# Sorl
-# ====
 
 THUMBNAIL_DEBUG = DEBUG
 THUMBNAIL_KEY_PREFIX = 'oscar-sandbox'
@@ -508,23 +426,15 @@ THUMBNAIL_KVSTORE = env(
     'THUMBNAIL_KVSTORE',
     default='sorl.thumbnail.kvstores.cached_db_kvstore.KVStore')
 THUMBNAIL_REDIS_URL = env('THUMBNAIL_REDIS_URL', default=None)
-
-# easy-thumbnail. See https://github.com/SmileyChris/easy-thumbnails/issues/641#issuecomment-2291098096
 THUMBNAIL_DEFAULT_STORAGE_ALIAS = "default"
 
-# Django 1.6 has switched to JSON serializing for security reasons, but it does not
-# serialize Models. We should resolve this by extending the
-# django/core/serializers/json.Serializer to have the `dumps` function. Also
-# in tests/config.py
 SESSION_SERIALIZER = 'django.contrib.sessions.serializers.JSONSerializer'
 
-# Security
 SECURE_SSL_REDIRECT = env.bool('SECURE_SSL_REDIRECT', default=False)
 SECURE_HSTS_SECONDS = env.int('SECURE_HSTS_SECONDS', default=0)
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_BROWSER_XSS_FILTER = True
 
-# Try and import local settings which can be used to override any of the above.
 try:
     from settings_local import *
 except ImportError:
