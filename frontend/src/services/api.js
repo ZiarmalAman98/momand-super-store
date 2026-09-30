@@ -63,7 +63,7 @@ export const api = {
   posSearch: (term) => apiRequest(`/pos/products/?search=${encodeURIComponent(term)}`),
   posSale: (payload) => apiRequest('/pos/sales/create/', { method: 'POST', body: JSON.stringify(payload) }),
   posSales: () => apiRequest('/pos/sales/'),
-  posSaleDetail: (invoice) => apiRequest(`/pos/sales/${encodeURIComponent(invoice)}/`),
+  posSaleDetail: (invoice) => apiRequest(`/pos/sales/${encodeURIComponent(invoice)}/`),\n  correctPosSale: (invoice, payload) => apiRequest(`/pos/sales/${encodeURIComponent(invoice)}/correction/`, { method: 'POST', body: JSON.stringify(payload) }),
   dashboard: () => apiRequest('/reports/dashboard/'),
   login: (email, password) => apiRequest('/auth/token/', {
     method: 'POST', body: JSON.stringify({ email, password }),
