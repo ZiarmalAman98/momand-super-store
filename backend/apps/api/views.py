@@ -693,17 +693,17 @@ class DashboardSummaryView(APIView):
 
 class FinancialReportView(APIView):
     permission_classes = (HasAnyMISPermission,)
-    required_permissions = (\"mis.view_possale\", \"mis.view_purchase\", \"mis.view_expense\")
+    required_permissions = ("mis.view_possale", "mis.view_purchase", "mis.view_expense")
 
     def get(self, request):
-        start_date = parse_date(request.query_params.get(\"start_date\", \"\")) if request.query_params.get(\"start_date\") else None
-        end_date = parse_date(request.query_params.get(\"end_date\", \"\")) if request.query_params.get(\"end_date\") else None
-        if request.query_params.get(\"start_date\") and start_date is None:
-            return Response({\"detail\": \"start_date must use YYYY-MM-DD format.\"}, status=status.HTTP_400_BAD_REQUEST)
-        if request.query_params.get(\"end_date\") and end_date is None:
-            return Response({\"detail\": \"end_date must use YYYY-MM-DD format.\"}, status=status.HTTP_400_BAD_REQUEST)
+        start_date = parse_date(request.query_params.get("start_date", "")) if request.query_params.get("start_date") else None
+        end_date = parse_date(request.query_params.get("end_date", "")) if request.query_params.get("end_date") else None
+        if request.query_params.get("start_date") and start_date is None:
+            return Response({"detail": "start_date must use YYYY-MM-DD format."}, status=status.HTTP_400_BAD_REQUEST)
+        if request.query_params.get("end_date") and end_date is None:
+            return Response({"detail": "end_date must use YYYY-MM-DD format."}, status=status.HTTP_400_BAD_REQUEST)
         try:
             report = financial_summary(start_date=start_date, end_date=end_date)
         except ValueError as exc:
-            return Response({\"detail\": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(report)
