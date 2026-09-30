@@ -7,7 +7,7 @@ from django.db.models import Q, Sum
 from django.utils import timezone
 from oscar.core.loading import get_model
 
-from .models import PaymentTransaction, POSSale, POSSaleItem, POSSaleReturn, POSSaleReturnItem, Purchase, PurchaseItem, StockMovement
+from .models import CashierShift, PaymentTransaction, POSSale, POSSaleItem, POSSaleReturn, POSSaleReturnItem, Purchase, PurchaseItem, StockMovement
 
 Product = get_model("catalogue", "Product")
 StockRecord = get_model("partner", "StockRecord")
@@ -348,3 +348,37 @@ def adjust_stock(*, stockrecord_id, quantity_delta, reason, created_by, note="")
         quantity_before=before, quantity_after=after,
         note=str(note)[:240], created_by=created_by,
     )
+
+
+@transaction.atomic
+def open_cashier_shift(*, cashier, opening_cash):
+    opening_cash = _decimal(opening_cash, "opening_cash")
+    if CashierShift.objects.select_for_update().filter(cashier=cashier, status=CashierShift.STATUS_OPEN).exists():
+        raise ValidationError({"shift": "This cashier already has an open shift."})
+    return CashierShift.objects.create(cashier=cashier, opening_cash=opening_cash, expected_cash=opening_cash)
+
+
+@transaction.atomic
+def close_cashier_shift(*, shift_id, closing_cash, note=""):
+    try:
+        shift = CashierShift.objects.select_for_update().get(pk=shift_id, status=CashierShift.STATUS_OPEN)
+    except CashierShift.DoesNotExist:
+        raise ValidationError({"shift": "Open cashier shift was not found."})
+    closing_cash = _decimal(closing_cash, "closing_cash")
+    cash_sales = PaymentTransaction.objects.filter(
+        sale__cashier=shift.cashier, sale__created_at__gte=shift.opened_at,
+        method=PaymentTransaction.METHOD_CASH, status=PaymentTransaction.STATUS_PAID,
+    ).aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+    cash_refunds = PaymentTransaction.objects.filter(
+        sale__cashier=shift.cashier, sale__created_at__gte=shift.opened_at,
+        method=PaymentTransaction.METHOD_CASH, status=PaymentTransaction.STATUS_REFUNDED,
+    ).aggregate(total=Sum("refunded_amount"))["total"] or Decimal("0.00")
+    expected = shift.opening_cash + cash_sales - cash_refunds
+    shift.expected_cash = expected
+    shift.closing_cash = closing_cash
+    shift.cash_difference = closing_cash - expected
+    shift.closed_at = timezone.now()
+    shift.status = CashierShift.STATUS_CLOSED
+    shift.note = str(note)[:240]
+    shift.save(update_fields=["expected_cash", "closing_cash", "cash_difference", "closed_at", "status", "note"])
+    return shift
