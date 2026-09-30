@@ -1,6 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
+from .access_views import AccessView, UserManagementView
 from .auth_views import (
     ConfirmPasswordResetView,
     CookieTokenObtainPairView,
@@ -51,6 +52,9 @@ router.register("expenses", ExpenseViewSet, basename="api-expense")
 urlpatterns = [
     path("", include(router.urls)),
     path("config/", StoreConfigView.as_view(), name="api-store-config"),
+    path("auth/access/", AccessView.as_view(), name="api-auth-access"),
+    path("admin/users/", UserManagementView.as_view(), name="api-admin-users"),
+    path("admin/users/<int:pk>/", UserManagementView.as_view(), name="api-admin-user-detail"),
     path("reports/dashboard/", DashboardSummaryView.as_view(), name="api-dashboard-summary"),
     path("reports/financial/", FinancialReportView.as_view(), name="api-financial-report"),
     path("countries/", CountryListView.as_view(), name="api-country-list"),
