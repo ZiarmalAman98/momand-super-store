@@ -35,10 +35,11 @@ from .serializers import (
     ExpenseSerializer,
     POSSaleReturnSerializer,
     POSSaleReturnCreateSerializer,
+    PaymentTransactionSerializer,
 )
 from .services import add_to_basket, get_session_basket
 from .permissions import HasMISPermission
-from apps.mis.models import Expense, POSSale, POSSaleItem, POSSaleReturn, Purchase, StockMovement, Supplier
+from apps.mis.models import Expense, PaymentTransaction, POSSale, POSSaleItem, POSSaleReturn, Purchase, StockMovement, Supplier
 from apps.mis.services import adjust_stock, create_pos_sale, process_pos_return, receive_purchase
 
 Category = get_model("catalogue", "Category")
