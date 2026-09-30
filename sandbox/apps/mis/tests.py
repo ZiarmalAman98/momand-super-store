@@ -72,6 +72,24 @@ class InventoryTransactionTests(TestCase):
         self.assertEqual(self.record.num_in_stock, 13)
         self.assertEqual(movement.quantity_delta, 5)
 
+    def test_pos_sale_cannot_consume_reserved_stock(self):
+        self.record.num_allocated = 7
+        self.record.save(update_fields=["num_allocated"])
+
+        with self.assertRaises(ValidationError):
+            create_pos_sale(
+                cashier=self.cashier,
+                items=[{"product_id": self.product.pk, "quantity": 2}],
+                payment_method=POSSale.PAYMENT_CASH,
+                amount_tendered="30.00",
+            )
+
+        self.record.refresh_from_db()
+        self.assertEqual(self.record.num_in_stock, 8)
+        self.assertEqual(self.record.num_allocated, 7)
+        self.assertEqual(POSSale.objects.count(), 0)
+        self.assertEqual(StockMovement.objects.count(), 0)
+
     def test_adjustment_cannot_reduce_reserved_stock(self):
         self.record.num_allocated = 3
         self.record.save(update_fields=["num_allocated"])
