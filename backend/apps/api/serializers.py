@@ -181,7 +181,7 @@ class POSSalePaymentSerializer(serializers.ModelSerializer):
 
 class POSSaleSerializer(serializers.ModelSerializer):
     items = POSSaleItemSerializer(many=True, read_only=True)
-    payments = POSSalePaymentSerializer(source="payments", many=True, read_only=True)
+    payments = POSSalePaymentSerializer(source="payment_transactions", many=True, read_only=True)
     cashier_name = serializers.CharField(source="cashier.get_full_name", read_only=True)
 
     class Meta:
