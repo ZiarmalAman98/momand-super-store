@@ -7,6 +7,7 @@ from django.db.models import Count, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from django.utils.dateparse import parse_date
+from django.core.exceptions import ValidationError
 from rest_framework import generics, status, viewsets
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -294,8 +295,32 @@ class CheckoutView(APIView):
                     shipping_address=address,
                     request=request,
                 )
+
+                # Oscar creates the order, but this custom store owns the physical
+                # inventory ledger. Deduct stock while the same row locks are held.
+                for line in basket_lines:
+                    record = locked_records[line.stockrecord_id]
+                    if record.num_in_stock is not None:
+                        before = max(0, record.net_stock_level or 0)
+                        if line.quantity > before:
+                            raise ValidationError(
+                                f"Insufficient stock for {line.product.get_title()}."
+                            )
+                        record.num_in_stock -= line.quantity
+                        record.save(update_fields=["num_in_stock"])
+                        StockMovement.objects.create(
+                            stockrecord=record,
+                            movement_type=StockMovement.TYPE_ONLINE_SALE,
+                            quantity_delta=-line.quantity,
+                            quantity_before=before,
+                            quantity_after=max(0, record.net_stock_level or 0),
+                            reference=order.number,
+                            note="Online checkout",
+                            created_by=request.user,
+                        )
+
                 basket.submit()
-        except (ObjectDoesNotExist, ValueError) as exc:
+        except (ObjectDoesNotExist, ValueError, ValidationError) as exc:
             return Response({"detail": str(exc) or "The order could not be placed."}, status=400)
         return Response(OrderSerializer(order).data, status=201)
 
