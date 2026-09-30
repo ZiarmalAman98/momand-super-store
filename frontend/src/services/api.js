@@ -82,6 +82,10 @@ export const api = {
     method: 'POST', body: JSON.stringify(payload),
   }, false),
   me: () => apiRequest('/auth/me/'),
+  access: () => apiRequest('/auth/access/'),
+  users: () => apiRequest('/admin/users/'),
+  createUser: (payload) => apiRequest('/admin/users/', { method: 'POST', body: JSON.stringify(payload) }),
+  updateUser: (id, payload) => apiRequest(`/admin/users/${id}/`, { method: 'PATCH', body: JSON.stringify(payload) }),
   logout: () => apiRequest('/auth/logout/', { method: 'POST' }, false),
   sendContact: (payload) => apiRequest('/contact/', {
     method: 'POST', body: JSON.stringify(payload),
