@@ -8,3 +8,4 @@ class MisConfig(AppConfig):
 
     def ready(self):
         from . import signals  # noqa: F401
+        from . import sale_corrections  # noqa: F401
