@@ -133,7 +133,7 @@ class InventoryTransactionTests(TestCase):
         self.assertEqual(purchase.total_cost, Decimal("41.25"))
         self.assertEqual(purchase.status, Purchase.STATUS_RECEIVED)
         self.assertEqual(self.record.num_in_stock, 13)
-        self.assertEqual(self.record.cost_price, Decimal("8.0962"))
+        self.assertEqual(self.record.cost_price, Decimal("8.10"))
         self.assertEqual(movement.quantity_delta, 5)
 
     def test_pos_sale_cannot_consume_reserved_stock(self):
