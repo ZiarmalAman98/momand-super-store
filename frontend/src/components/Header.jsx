@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
-import { Menu, Search, ShoppingBasket, Store, X } from 'lucide-react'
+import { Menu, Search, ShieldCheck, ShoppingBasket, Store, X } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 
@@ -35,7 +35,8 @@ export default function Header() {
           <button type="submit">Search</button>
         </form>
         <div className="header-actions">
-          <Link className="account-action" to={user ? '/account' : '/login'}><span>{user ? `Hi, ${user.first_name || user.email.split('@')[0]}` : 'Account'}</span><small>{user ? 'My account' : 'Login / Register'}</small></Link>
+          {user?.is_staff ? <Link className="account-action admin-header-action" to="/admin/dashboard"><span><ShieldCheck size={14} /> Admin</span><small>Control panel</small></Link> : <Link className="account-action" to={user ? '/account' : '/login'}><span>{user ? `Hi, ${user.first_name || user.email.split('@')[0]}` : 'Account'}</span><small>{user ? 'My account' : 'Login / Register'}</small></Link>}
+          {!user?.is_staff && <Link className="account-action" to="/admin/login"><span>Admin Login</span><small>Staff access</small></Link>}
           <Link className="cart-action" to="/cart" aria-label={`Cart, ${cartCount} items`}><ShoppingBasket size={22} /><span className="cart-count">{cartCount}</span><small>Cart</small></Link>
         </div>
       </div>
