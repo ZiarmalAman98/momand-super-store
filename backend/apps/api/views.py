@@ -41,7 +41,7 @@ from .serializers import (
 from .services import add_to_basket, get_session_basket
 from .permissions import HasMISPermission
 from apps.mis.models import CashierShift, Expense, PaymentTransaction, POSSale, POSSaleItem, POSSaleReturn, Purchase, StockMovement, Supplier
-from apps.mis.services import adjust_stock, close_cashier_shift, create_pos_sale, open_cashier_shift, process_pos_return, receive_purchase
+from apps.mis.services import adjust_stock, close_cashier_shift, create_pos_sale, open_cashier_shift, process_pos_return, receive_purchase\nfrom apps.mis.accounting import financial_summary
 
 Category = get_model("catalogue", "Category")
 Product = get_model("catalogue", "Product")
@@ -672,3 +672,4 @@ class DashboardSummaryView(APIView):
             result["expenses_month"] = str(Expense.objects.filter(spent_at__gte=month_start).aggregate(value=Sum("amount"))["value"] or Decimal("0.00"))
         return Response(result)
 
+\n\nclass FinancialReportView(APIView):\n    permission_classes = (HasAnyMISPermission,)\n    required_permissions = (\"mis.view_possale\", \"mis.view_purchase\", \"mis.view_expense\")\n\n    def get(self, request):\n        start_date = parse_date(request.query_params.get(\"start_date\", \"\")) if request.query_params.get(\"start_date\") else None\n        end_date = parse_date(request.query_params.get(\"end_date\", \"\")) if request.query_params.get(\"end_date\") else None\n        if request.query_params.get(\"start_date\") and start_date is None:\n            return Response({\"detail\": \"start_date must use YYYY-MM-DD format.\"}, status=status.HTTP_400_BAD_REQUEST)\n        if request.query_params.get(\"end_date\") and end_date is None:\n            return Response({\"detail\": \"end_date must use YYYY-MM-DD format.\"}, status=status.HTTP_400_BAD_REQUEST)\n        try:\n            report = financial_summary(start_date=start_date, end_date=end_date)\n        except ValueError as exc:\n            return Response({\"detail\": str(exc)}, status=status.HTTP_400_BAD_REQUEST)\n        return Response(report)\n
