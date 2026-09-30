@@ -485,3 +485,93 @@ class Expense(models.Model):
 
     def __str__(self):
         return self.description
+
+
+class PaymentTransaction(models.Model):
+    METHOD_CASH = "cash"
+    METHOD_CARD = "card"
+    METHOD_BANK_TRANSFER = "bank_transfer"
+    METHOD_COD = "cod"
+    METHOD_ONLINE = "online"
+    METHOD_CHOICES = [
+        (METHOD_CASH, "Cash"),
+        (METHOD_CARD, "Card"),
+        (METHOD_BANK_TRANSFER, "Bank transfer"),
+        (METHOD_COD, "Cash on delivery"),
+        (METHOD_ONLINE, "Online"),
+    ]
+
+    STATUS_PENDING = "pending"
+    STATUS_PAID = "paid"
+    STATUS_FAILED = "failed"
+    STATUS_REFUNDED = "refunded"
+    STATUS_PARTIALLY_REFUNDED = "partially_refunded"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pending"),
+        (STATUS_PAID, "Paid"),
+        (STATUS_FAILED, "Failed"),
+        (STATUS_REFUNDED, "Refunded"),
+        (STATUS_PARTIALLY_REFUNDED, "Partially refunded"),
+    ]
+
+    transaction_ref = models.CharField(max_length=64, unique=True, editable=False)
+    sale = models.ForeignKey(
+        POSSale, null=True, blank=True, on_delete=models.PROTECT,
+        related_name="payment_transactions",
+    )
+    order = models.ForeignKey(
+        "order.Order", null=True, blank=True, on_delete=models.PROTECT,
+        related_name="payment_transactions",
+    )
+    method = models.CharField(max_length=20, choices=METHOD_CHOICES)
+    status = models.CharField(max_length=24, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True)
+    amount = models.DecimalField(
+        max_digits=14, decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01"))],
+    )
+    refunded_amount = models.DecimalField(
+        max_digits=14, decimal_places=2, default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+    )
+    gateway = models.CharField(max_length=80, blank=True)
+    note = models.CharField(max_length=240, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="payment_transactions",
+    )
+    paid_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["status", "created_at"]),
+            models.Index(fields=["method", "created_at"]),
+            models.Index(fields=["sale", "created_at"]),
+            models.Index(fields=["order", "created_at"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(amount__gt=0),
+                name="mis_payment_amount_positive",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(refunded_amount__gte=0),
+                name="mis_payment_refunded_nonnegative",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(refunded_amount__lte=models.F("amount")),
+                name="mis_payment_refund_lte_amount",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    (models.Q(sale__isnull=False) & models.Q(order__isnull=True))
+                    | (models.Q(sale__isnull=True) & models.Q(order__isnull=False))
+                ),
+                name="mis_payment_one_order_source",
+            ),
+        ]
+
+    def __str__(self):
+        return self.transaction_ref
