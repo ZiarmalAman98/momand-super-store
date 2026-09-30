@@ -64,6 +64,10 @@ export const api = {
   posSale: (payload) => apiRequest('/pos/sales/create/', { method: 'POST', body: JSON.stringify(payload) }),
   posSales: () => apiRequest('/pos/sales/'),
   posSaleDetail: (invoice) => apiRequest(`/pos/sales/${encodeURIComponent(invoice)}/`),
+  correctPosSale: (invoice, payload) => apiRequest(`/pos/sales/${encodeURIComponent(invoice)}/correction/`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }),
   dashboard: () => apiRequest('/reports/dashboard/'),
   login: (email, password) => apiRequest('/auth/token/', {
     method: 'POST', body: JSON.stringify({ email, password }),
