@@ -1,7 +1,7 @@
 from decimal import Decimal
 from datetime import datetime, time
 
-from django.db.models import Count, Sum
+from django.conf import settings\nfrom django.db.models import Count, Sum
 from django.utils import timezone
 
 from apps.mis.models import Expense, PaymentTransaction, POSSale, POSSaleReturn, Purchase
@@ -69,7 +69,7 @@ def financial_summary(*, start_date=None, end_date=None):
     return {
         "start_date": start_date.isoformat(),
         "end_date": end_date.isoformat(),
-        "currency": getattr(__import__("django.conf", fromlist=["settings"]).settings, "OSCAR_DEFAULT_CURRENCY", "AFN"),
+        "currency": getattr(settings, "OSCAR_DEFAULT_CURRENCY", "AFN"),
         "pos_sales": {"transactions": pos_sales.count(), "gross": str(pos_gross), "refunds": str(pos_refunds), "net": str(pos_net)},
         "online_sales": {"orders": online_orders.count(), "gross": str(online_gross)},
         "revenue": {"gross": str(pos_gross + online_gross), "refunds": str(pos_refunds), "net": str(pos_net + online_gross)},
