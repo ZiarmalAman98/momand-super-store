@@ -30,6 +30,10 @@ class Migration(migrations.Migration):
             ],
             options={
                 "ordering": ["-opened_at", "-id"],
+                "permissions": [
+                    ("view_cashiershift_all", "Can view all cashier shifts"),
+                    ("change_cashiershift_all", "Can manage all cashier shifts"),
+                ],
             },
         ),
         migrations.AddIndex(
