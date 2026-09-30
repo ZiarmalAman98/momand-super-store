@@ -37,7 +37,14 @@ def _quantity(value):
     return quantity
 
 
-def _product_and_record(item, lock=True):
+def _product_and_record(item):
+    """Resolve one sellable product without locking.
+
+    Stock rows are locked later in deterministic PK order. This is important
+    when a transaction contains multiple products: locking in request order
+    can otherwise create avoidable deadlocks between concurrent checkouts/POS
+    sales.
+    """
     product_id = item.get("product_id")
     barcode = str(item.get("barcode", "")).strip()
     if not product_id and not barcode:
@@ -49,20 +56,35 @@ def _product_and_record(item, lock=True):
                 raise ValueError
         except (TypeError, ValueError):
             raise ValidationError({"items": "Product id must be a positive integer."})
-    products = Product.objects.filter(Q(pk=product_id) if product_id else Q(upc=barcode)).browsable()
+    products = Product.objects.filter(
+        Q(pk=product_id) if product_id else Q(upc=barcode)
+    ).browsable()
     matches = list(products[:2])
     if not matches:
         raise ValidationError({"items": "A scanned product was not found or is inactive."})
     if len(matches) > 1:
-        raise ValidationError({"items": "This barcode matches more than one product; resolve it in catalogue management."})
+        raise ValidationError({
+            "items": "This barcode matches more than one product; resolve it in catalogue management."
+        })
     product = matches[0]
-    records = StockRecord.objects.filter(product=product).order_by("pk")
-    if lock:
-        records = records.select_for_update()
-    record = records.first()
+    record = StockRecord.objects.filter(product=product).order_by("pk").first()
     if not record:
         raise ValidationError({"items": f"{product.get_title()} has no stock record."})
     return product, record
+
+
+def _lock_stock_records(record_ids):
+    """Lock stock rows in a deterministic order for the current transaction."""
+    locked = {
+        record.pk: record
+        for record in StockRecord.objects.select_for_update().filter(
+            pk__in=record_ids
+        ).order_by("pk")
+    }
+    missing = set(record_ids) - set(locked)
+    if missing:
+        raise ValidationError({"items": "One or more stock records no longer exist."})
+    return locked
 
 
 @transaction.atomic
@@ -101,6 +123,11 @@ def create_pos_sale(*, cashier, items, payment_method, amount_tendered, customer
             prepared_by_record[record.pk] = [product, record, quantity, price, line_total]
 
     prepared = list(prepared_by_record.values())
+    locked_records = _lock_stock_records([record.pk for _product, record, _quantity, _price, _line_total in prepared])
+    prepared = [
+        [product, locked_records[record.pk], quantity, price, line_total]
+        for product, record, quantity, price, line_total in prepared
+    ]
     for product, record, quantity, _price, _line_total in prepared:
         available = max(0, record.net_stock_level or 0)
         if quantity > available:
@@ -131,6 +158,8 @@ def create_pos_sale(*, cashier, items, payment_method, amount_tendered, customer
     )
     for product, record, quantity, price, line_total in prepared:
         before = max(0, record.net_stock_level or 0)
+        if record.num_in_stock is None or record.num_in_stock < (record.num_allocated or 0) + quantity:
+            raise ValidationError({"items": f"Only {before} units of {product.get_title()} are available."})
         record.num_in_stock -= quantity
         record.save(update_fields=["num_in_stock"])
         POSSaleItem.objects.create(
@@ -175,6 +204,9 @@ def process_pos_return(*, invoice_number, processed_by, items, refund_method, re
     lines = list(POSSaleItem.objects.select_for_update().filter(sale=sale, pk__in=requested).order_by("stockrecord_id", "pk"))
     if len(lines) != len(requested):
         raise ValidationError({"items": "A selected item does not belong to this sale."})
+    locked_return_records = _lock_stock_records(
+        sorted({line.stockrecord_id for line in lines})
+    )
     refund_total = Decimal("0.00")
     for line in lines:
         already_returned = line.return_items.aggregate(quantity=Sum("quantity"))["quantity"] or 0
@@ -199,7 +231,7 @@ def process_pos_return(*, invoice_number, processed_by, items, refund_method, re
             quantity=quantity, refund_amount=amount,
         )
         if restocked:
-            record = StockRecord.objects.select_for_update().get(pk=line.stockrecord_id)
+            record = locked_return_records[line.stockrecord_id]
             before = max(0, record.net_stock_level or 0) if record.num_in_stock is not None else 0
             record.num_in_stock = (record.num_in_stock or 0) + quantity
             record.save(update_fields=["num_in_stock"])
@@ -236,13 +268,17 @@ def receive_purchase(*, supplier, reference, purchased_at, items, created_by, no
         prepared.append((product, record, quantity, unit_cost, line_total))
     if total > Decimal("9999999999999.99"):
         raise ValidationError({"items": "Purchase total exceeds the supported currency range."})
+    locked_records = _lock_stock_records([record.pk for _product, record, _quantity, _unit_cost, _line_total in prepared])
+    prepared = [
+        (product, locked_records[record.pk], quantity, unit_cost, line_total)
+        for product, record, quantity, unit_cost, line_total in prepared
+    ]
     purchase = Purchase.objects.create(
         supplier=supplier, reference=reference, purchased_at=purchased_at,
         currency=currency, total_cost=total, status=Purchase.STATUS_RECEIVED,
         notes=notes, created_by=created_by,
     )
     for product, record, quantity, unit_cost, line_total in prepared:
-        record.refresh_from_db(fields=["num_in_stock", "num_allocated"])
         before = max(0, record.net_stock_level or 0) if record.num_in_stock is not None else 0
         record.num_in_stock = (record.num_in_stock or 0) + quantity
         record.save(update_fields=["num_in_stock"])
