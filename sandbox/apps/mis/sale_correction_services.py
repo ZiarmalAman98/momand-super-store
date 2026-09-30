@@ -31,14 +31,14 @@ def correct_pos_sale(*, invoice_number, processed_by, items, reason):
             raise ValidationError({"items": f"Corrected quantity for {sale_item.title} must be between 1 and {sale_item.quantity}."})
         if corrected_quantity == sale_item.quantity:
             continue
-        normalized.append((sale_item, corrected_quantity))
+        normalized.append((sale_item, sale_item.quantity, corrected_quantity))
 
     if not normalized:
         raise ValidationError({"items": "The corrected quantity must be lower than the current quantity."})
 
     original_total = sale.total
-    for sale_item, corrected_quantity in normalized:
-        delta = sale_item.quantity - corrected_quantity
+    for sale_item, original_quantity, corrected_quantity in normalized:
+        delta = original_quantity - corrected_quantity
         stockrecord = sale_item.stockrecord
         stockrecord = type(stockrecord).objects.select_for_update().get(pk=stockrecord.pk)
         if stockrecord.num_in_stock is not None:
@@ -52,7 +52,7 @@ def correct_pos_sale(*, invoice_number, processed_by, items, reason):
                 quantity_before=before,
                 quantity_after=max(0, stockrecord.net_stock_level or 0),
                 reference=sale.invoice_number,
-                note=f"Sale correction: {sale_item.title}; {sale_item.quantity} -> {corrected_quantity}",
+                note=f"Sale correction: {sale_item.title}; {original_quantity} -> {corrected_quantity}",
                 created_by=processed_by,
             )
         sale_item.quantity = corrected_quantity
