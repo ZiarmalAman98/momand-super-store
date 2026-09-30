@@ -19,7 +19,7 @@ class Command(BaseCommand):
         StockRecord = get_model("partner", "StockRecord")
 
         permission_codes = [
-            "mis.view_possale", "mis.add_possale", "mis.view_cashiershift", "mis.change_cashiershift",
+            "mis.view_possale", "mis.add_possale", "mis.change_possale", "mis.delete_possale", "mis.view_cashiershift", "mis.change_cashiershift",
             "mis.view_stockmovement", "mis.add_stockmovement", "mis.view_purchase", "mis.add_purchase",
             "mis.view_supplier", "mis.add_supplier", "mis.change_supplier", "mis.delete_supplier",
             "mis.view_expense", "mis.add_expense", "mis.change_expense", "mis.delete_expense",
@@ -55,7 +55,7 @@ class Command(BaseCommand):
         cashier.is_active = True
         cashier.set_password("CashierDemo123!")
         cashier.save()
-        cashier.user_permissions.set(perms(["mis.view_possale", "mis.add_possale", "mis.view_cashiershift", "mis.change_cashiershift", "catalogue.view_product"]))
+        cashier.user_permissions.set(perms(["catalogue.view_product", "mis.add_possale", "mis.view_possale"]))
 
         Group.objects.get_or_create(name="Cashier")[0].permissions.set(perms(["mis.view_possale", "mis.add_possale", "mis.view_cashiershift", "mis.change_cashiershift", "catalogue.view_product"]))
         Group.objects.get_or_create(name="Admin")[0].permissions.set(perms(permission_codes))
