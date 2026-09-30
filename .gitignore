@@ -20,8 +20,11 @@ local_settings.py
 !.env.example
 
 # Database
+*.sqlite
 *.sqlite3
+*.sqlite-journal
 *.sqlite3-journal
+db.sqlite
 db.sqlite3
 
 # Media / User uploads
