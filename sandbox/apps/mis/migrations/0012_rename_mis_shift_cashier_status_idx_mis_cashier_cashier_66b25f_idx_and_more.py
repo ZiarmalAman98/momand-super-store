@@ -66,26 +66,6 @@ class Migration(migrations.Migration):
             new_name='mis_purchas_status_360197_idx',
             old_name='mis_purchase_status_date_idx',
         ),
-        migrations.AddField(
-            model_name='possaleitem',
-            name='cost_total',
-            field=models.DecimalField(decimal_places=2, default=Decimal('0.00'), max_digits=14, validators=[django.core.validators.MinValueValidator(Decimal('0.00'))]),
-        ),
-        migrations.AddField(
-            model_name='possaleitem',
-            name='unit_cost',
-            field=models.DecimalField(blank=True, decimal_places=2, max_digits=12, null=True, validators=[django.core.validators.MinValueValidator(Decimal('0.00'))]),
-        ),
-        migrations.AddField(
-            model_name='possalereturnitem',
-            name='cost_total',
-            field=models.DecimalField(decimal_places=2, default=Decimal('0.00'), max_digits=14, validators=[django.core.validators.MinValueValidator(Decimal('0.00'))]),
-        ),
-        migrations.AddField(
-            model_name='possalereturnitem',
-            name='unit_cost',
-            field=models.DecimalField(blank=True, decimal_places=2, max_digits=12, null=True, validators=[django.core.validators.MinValueValidator(Decimal('0.00'))]),
-        ),
         migrations.AlterField(
             model_name='expense',
             name='amount',
@@ -208,45 +188,5 @@ class Migration(migrations.Migration):
         migrations.AddIndex(
             model_name='stockmovement',
             index=models.Index(fields=['reference', 'created_at'], name='mis_stockmo_referen_6af927_idx'),
-        ),
-        migrations.AddConstraint(
-            model_name='possale',
-            constraint=models.CheckConstraint(condition=models.Q(('subtotal__gte', 0), ('discount__gte', 0), ('tax__gte', 0), ('total__gte', 0), ('amount_tendered__gte', 0), ('change_due__gte', 0)), name='mis_pos_sale_amounts_nonnegative'),
-        ),
-        migrations.AddConstraint(
-            model_name='possaleitem',
-            constraint=models.CheckConstraint(condition=models.Q(('quantity__gt', 0)), name='mis_pos_sale_item_qty_positive'),
-        ),
-        migrations.AddConstraint(
-            model_name='possaleitem',
-            constraint=models.CheckConstraint(condition=models.Q(('unit_price__gte', 0), ('unit_tax__gte', 0), ('line_total__gte', 0)), name='mis_pos_sale_item_amounts_nonnegative'),
-        ),
-        migrations.AddConstraint(
-            model_name='possalereturn',
-            constraint=models.CheckConstraint(condition=models.Q(('refund_total__gte', 0)), name='mis_pos_return_total_nonnegative'),
-        ),
-        migrations.AddConstraint(
-            model_name='possalereturnitem',
-            constraint=models.CheckConstraint(condition=models.Q(('quantity__gt', 0)), name='mis_pos_return_item_qty_positive'),
-        ),
-        migrations.AddConstraint(
-            model_name='possalereturnitem',
-            constraint=models.CheckConstraint(condition=models.Q(('refund_amount__gte', 0)), name='mis_pos_return_item_amount_nonnegative'),
-        ),
-        migrations.AddConstraint(
-            model_name='purchaseitem',
-            constraint=models.CheckConstraint(condition=models.Q(('unit_cost__gte', 0)), name='mis_purchase_item_cost_nonnegative'),
-        ),
-        migrations.AddConstraint(
-            model_name='purchaseitem',
-            constraint=models.CheckConstraint(condition=models.Q(('line_total__gte', 0)), name='mis_purchase_item_total_nonnegative'),
-        ),
-        migrations.AddConstraint(
-            model_name='stockmovement',
-            constraint=models.CheckConstraint(condition=models.Q(('quantity_before__gte', 0), ('quantity_before__isnull', True), _connector='OR'), name='mis_stock_movement_before_nonnegative'),
-        ),
-        migrations.AddConstraint(
-            model_name='stockmovement',
-            constraint=models.CheckConstraint(condition=models.Q(('quantity_after__gte', 0), ('quantity_after__isnull', True), _connector='OR'), name='mis_stock_movement_after_nonnegative'),
         ),
     ]
