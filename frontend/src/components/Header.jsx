@@ -8,9 +8,11 @@ export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [cartCount, setCartCount] = useState(0)
   const [query, setQuery] = useState('')
+  const [storeConfig, setStoreConfig] = useState(null)
   const { user, logout } = useAuth()
 
   useEffect(() => {
+    api.storeConfig().then(setStoreConfig).catch(() => {})
     const refresh = () => api.cart().then((cart) => setCartCount(cart.count)).catch(() => {})
     refresh()
     window.addEventListener('cart-updated', refresh)
@@ -20,14 +22,14 @@ export default function Header() {
   const navClass = ({ isActive }) => `nav-link${isActive ? ' active' : ''}`
   return (
     <header className="site-header">
-      <div className="announcement"><div className="site-container">Your neighborhood store, now online <span>•</span> Quality for every day</div></div>
+      <div className="announcement"><div className="site-container">{storeConfig?.tagline || 'Your neighborhood store, now online · Quality for every day'}</div></div>
       <div className="site-container header-main">
         <button className="icon-button mobile-menu" aria-label="Open navigation" onClick={() => setMenuOpen(!menuOpen)}>
           {menuOpen ? <X size={21} /> : <Menu size={21} />}
         </button>
         <Link className="brand" to="/" aria-label="Momand Super Store home">
           <span className="brand-mark"><Store size={23} /></span>
-          <span><strong>Momand</strong><small>SUPER STORE</small></span>
+          <span><strong>{storeConfig?.name || 'Momand'}</strong><small>SUPER STORE</small></span>
         </Link>
         <form className="search-bar" onSubmit={(event) => { event.preventDefault(); window.location.href = `/shop${query ? `?search=${encodeURIComponent(query)}` : ''}` }}>
           <Search size={18} />

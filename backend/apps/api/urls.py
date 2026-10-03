@@ -1,7 +1,6 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from .access_views import AccessView, UserManagementView
 from .auth_views import (
     ConfirmPasswordResetView,
     CookieTokenObtainPairView,
@@ -23,6 +22,8 @@ from .views import (
     POSSaleCreateView,
     POSSaleDetailView,
     POSSaleListView,
+    POSSaleBalancePaymentView,
+    POSSaleOutstandingBalancesView,
     PurchaseListView,
     PurchaseReceiveView,
     StockMovementListView,
@@ -35,11 +36,21 @@ from .views import (
     FinancialReportView,
     ExpenseViewSet,
     PaymentTransactionListView,
+    PaymentTransactionUpdateView,
+    OnlineOrderListView,
+    StaffCustomerListView,
+    POSSaleCustomerListView,
+    StoreSettingsView,
+    StoreBackupDownloadView,
+    ProductImageUploadView,
     CashierShiftListCreateView,
     CurrentCashierShiftView,
     CashierShiftCloseView,
     POSSaleReturnCreateView,
     POSSaleReturnListView,
+    POSSaleCorrectionCreateView,
+    POSSaleCorrectionRequestCreateView,
+    StaffUsersView,
 )
 
 router = DefaultRouter()
@@ -50,11 +61,14 @@ router.register("suppliers", SupplierViewSet, basename="api-supplier")
 router.register("expenses", ExpenseViewSet, basename="api-expense")
 
 urlpatterns = [
+    path("orders/manage/", OnlineOrderListView.as_view(), name="api-admin-online-orders"),
+    path("customers/manage/", StaffCustomerListView.as_view(), name="api-staff-customers"),
+    path("customers/pos/manage/", POSSaleCustomerListView.as_view(), name="api-pos-customers"),
+    path("staff/store-settings/", StoreSettingsView.as_view(), name="api-store-settings"),
+    path("staff/products/<int:product_id>/image/", ProductImageUploadView.as_view(), name="api-product-image-upload"),
+    path("admin/backup/", StoreBackupDownloadView.as_view(), name="api-store-backup"),
     path("", include(router.urls)),
     path("config/", StoreConfigView.as_view(), name="api-store-config"),
-    path("auth/access/", AccessView.as_view(), name="api-auth-access"),
-    path("admin/users/", UserManagementView.as_view(), name="api-admin-users"),
-    path("admin/users/<int:pk>/", UserManagementView.as_view(), name="api-admin-user-detail"),
     path("reports/dashboard/", DashboardSummaryView.as_view(), name="api-dashboard-summary"),
     path("reports/financial/", FinancialReportView.as_view(), name="api-financial-report"),
     path("countries/", CountryListView.as_view(), name="api-country-list"),
@@ -62,11 +76,16 @@ urlpatterns = [
     path("checkout/", CheckoutView.as_view(), name="api-checkout"),
     path("pos/products/", POSProductSearchView.as_view(), name="api-pos-products"),
     path("pos/sales/", POSSaleListView.as_view(), name="api-pos-sales"),
+    path("pos/balances/", POSSaleOutstandingBalancesView.as_view(), name="api-pos-outstanding-balances"),
     path("pos/sales/create/", POSSaleCreateView.as_view(), name="api-pos-sale-create"),
     path("pos/sales/<str:invoice_number>/", POSSaleDetailView.as_view(), name="api-pos-sale-detail"),
+    path("pos/sales/<str:invoice_number>/balance-payment/", POSSaleBalancePaymentView.as_view(), name="api-pos-sale-balance-payment"),
     path("pos/sales/<str:invoice_number>/returns/", POSSaleReturnCreateView.as_view(), name="api-pos-sale-return"),
+    path("pos/sales/<str:invoice_number>/correction/", POSSaleCorrectionCreateView.as_view(), name="api-pos-sale-correction"),
+    path("pos/sales/<str:invoice_number>/correction-request/", POSSaleCorrectionRequestCreateView.as_view(), name="api-pos-sale-correction-request"),
     path("pos/returns/", POSSaleReturnListView.as_view(), name="api-pos-returns"),
     path("payments/transactions/", PaymentTransactionListView.as_view(), name="api-payment-transactions"),
+    path("payments/transactions/<str:transaction_ref>/", PaymentTransactionUpdateView.as_view(), name="api-payment-transaction-update"),
     path("pos/shifts/", CashierShiftListCreateView.as_view(), name="api-cashier-shifts"),
     path("pos/shifts/current/", CurrentCashierShiftView.as_view(), name="api-current-cashier-shift"),
     path("pos/shifts/<int:pk>/close/", CashierShiftCloseView.as_view(), name="api-cashier-shift-close"),
@@ -82,6 +101,8 @@ urlpatterns = [
     path("auth/password-reset/confirm/", ConfirmPasswordResetView.as_view(), name="api-password-reset-confirm"),
     path("auth/token/", CookieTokenObtainPairView.as_view(), name="api-token-obtain"),
     path("auth/me/", CurrentUserView.as_view(), name="api-me"),
+    path("staff/users/", StaffUsersView.as_view(), name="api-staff-users"),
+    path("staff/users/<int:user_id>/", StaffUsersView.as_view(), name="api-staff-user-detail"),
     path("auth/token/refresh/", CookieTokenRefreshView.as_view(), name="api-token-refresh"),
     path("auth/logout/", LogoutView.as_view(), name="api-logout"),
 ]

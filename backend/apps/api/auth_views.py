@@ -12,6 +12,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
+from .permissions import effective_staff_permissions
 
 REFRESH_COOKIE = "momand_refresh"
 REFRESH_PATH = "/api/v1/auth/"
@@ -63,6 +64,10 @@ class CookieTokenObtainPairView(APIView):
                 "first_name": user.first_name,
                 "last_name": user.last_name,
                 "is_staff": user.is_staff,
+                "is_superuser": user.is_superuser,
+                "groups": list(user.groups.values_list("name", flat=True)),
+                "permissions": effective_staff_permissions(user),
+                "can_manage_users": bool(user.is_superuser or user.has_perm("auth.view_user") or user.groups.filter(name__in=("Admin", "Super Admin")).exists()),
             },
         })
         return attach_refresh_cookie(response, refresh)

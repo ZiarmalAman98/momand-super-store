@@ -6,12 +6,12 @@ from django.db.models import Q
 ROLES = {
     "Super Admin": "*",
     "Admin": "*",
-    "Manager": ["mis.view_possale", "mis.add_possale", "mis.view_possalereturn", "mis.add_possalereturn", "mis.view_purchase", "mis.add_purchase", "mis.view_supplier", "mis.add_supplier", "mis.change_supplier", "mis.view_stockmovement", "mis.add_stockmovement", "mis.view_expense", "mis.add_expense", "catalogue.view_product"],
+    "Manager": ["mis.view_possale", "mis.view_possale_all", "mis.add_possale", "mis.view_possalereturn", "mis.add_possalereturn", "mis.view_paymenttransaction", "mis.change_paymenttransaction", "order.view_order", "mis.view_purchase", "mis.add_purchase", "mis.view_supplier", "mis.add_supplier", "mis.change_supplier", "mis.view_stockmovement", "mis.add_stockmovement", "mis.view_expense", "mis.add_expense", "mis.view_dashboard", "mis.view_financialreport", "catalogue.view_product"],
     "Cashier": ["mis.view_possale", "mis.add_possale", "catalogue.view_product"],
-    "Inventory Manager": ["mis.view_supplier", "mis.view_stockmovement", "mis.add_stockmovement", "catalogue.view_product", "partner.view_stockrecord"],
-    "Sales Manager": ["mis.view_possale", "mis.add_possale", "mis.view_possalereturn", "mis.add_possalereturn", "catalogue.view_product"],
+    "Inventory Manager": ["mis.view_supplier", "mis.view_stockmovement", "mis.add_stockmovement", "mis.view_dashboard", "catalogue.view_product", "partner.view_stockrecord"],
+    "Sales Manager": ["mis.view_possale", "mis.view_possale_all", "mis.add_possale", "mis.view_possalereturn", "mis.add_possalereturn", "mis.view_dashboard", "catalogue.view_product"],
     "Purchase Manager": ["mis.view_purchase", "mis.add_purchase", "mis.view_supplier", "mis.add_supplier", "mis.change_supplier", "mis.view_stockmovement", "mis.add_stockmovement", "catalogue.view_product", "partner.view_stockrecord"],
-    "Accountant": ["mis.view_possale", "mis.view_possalereturn", "mis.view_purchase", "mis.view_expense", "mis.add_expense", "mis.view_stockmovement"],
+    "Accountant": ["mis.view_possale", "mis.view_possale_all", "mis.view_possalereturn", "mis.view_paymenttransaction", "mis.change_paymenttransaction", "order.view_order", "mis.view_purchase", "mis.view_expense", "mis.add_expense", "mis.view_stockmovement", "mis.view_dashboard", "mis.view_financialreport"],
     "Customer": [],
 }
 
@@ -26,7 +26,7 @@ class Command(BaseCommand):
             group, _ = Group.objects.get_or_create(name=role)
             if permission_codes == "*":
                 if role == "Admin":
-                    group.permissions.set(all_permissions.exclude(content_type__app_label="auth"))
+                    group.permissions.set(all_permissions.exclude(content_type__app_label__in=("contenttypes", "sessions")))
                 else:
                     group.permissions.set(all_permissions)
             else:

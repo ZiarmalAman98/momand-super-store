@@ -1,12 +1,12 @@
 import { Link } from 'react-router-dom'
 import { ShoppingBasket } from 'lucide-react'
 import { useState } from 'react'
-import { api } from '../services/api'
+import { api, mediaUrl } from '../services/api'
 
 export default function ProductCard({ product }) {
   const [adding, setAdding] = useState(false)
   const [message, setMessage] = useState('')
-  const image = product.image?.startsWith('/') ? product.image : product.image ? `/media/${product.image}` : null
+  const image = mediaUrl(product.image) || '/media/image_not_found.jpg'
 
   async function addToCart() {
     setAdding(true)
@@ -26,7 +26,7 @@ export default function ProductCard({ product }) {
   return (
     <article className="product-card">
       <Link className="product-image" to={`/product/${product.slug}`}>
-        {image ? <img src={image} alt={product.title} loading="lazy" /> : <span className="image-placeholder">{product.title.slice(0, 1)}</span>}
+        <img src={image} alt={product.title} loading="lazy" onError={event => { event.currentTarget.onerror = null; event.currentTarget.src = '/media/image_not_found.jpg' }} />
         {!product.in_stock && <span className="stock-pill">Out of stock</span>}
       </Link>
       <div className="product-info">

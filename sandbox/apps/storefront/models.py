@@ -1,5 +1,7 @@
 from django.db import models
 
+from .store_settings import StoreSettings, current_store_settings
+
 
 class ContactMessage(models.Model):
     name = models.CharField(max_length=120)

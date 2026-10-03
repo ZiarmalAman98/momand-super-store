@@ -21,7 +21,7 @@ export default function AdminLoginPage() {
         await logout()
         throw new Error('This account does not have staff access.')
       }
-      navigate('/admin/dashboard', { replace: true })
+      navigate(user.permissions?.some(code => code.startsWith('mis.view_')) ? '/admin/dashboard' : '/admin/pos', { replace: true })
     } catch (err) {
       setError(err.data?.detail || err.message || 'Admin email or password is incorrect.')
     } finally {

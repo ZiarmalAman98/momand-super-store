@@ -1,6 +1,24 @@
 from rest_framework.permissions import BasePermission, SAFE_METHODS
 
 
+ROLE_ADDITIONAL_PERMISSIONS = {
+    "Manager": {"order.view_order", "mis.view_paymenttransaction", "mis.change_paymenttransaction"},
+    "Accountant": {"order.view_order", "mis.view_paymenttransaction", "mis.change_paymenttransaction"},
+}
+
+
+def effective_staff_permissions(user):
+    """Return assigned permissions plus the fixed baseline of a Cashier role."""
+    permissions = set(user.get_all_permissions())
+    group_names = set(user.groups.values_list("name", flat=True))
+    for group_name, additions in ROLE_ADDITIONAL_PERMISSIONS.items():
+        if group_name in group_names:
+            permissions.update(additions)
+    if "Cashier" in group_names:
+        permissions.update({"catalogue.view_product", "mis.add_possale", "mis.view_possale"})
+    return sorted(permissions)
+
+
 class HasMISPermission(BasePermission):
     """Check Django's per-model permission assigned to staff groups."""
 
@@ -12,7 +30,7 @@ class HasMISPermission(BasePermission):
             and user.is_authenticated
             and user.is_staff
             and permission
-            and user.has_perm(permission)
+            and (permission in effective_staff_permissions(user) or user.groups.filter(name__in=("Admin", "Super Admin")).exists())
         )
 
 

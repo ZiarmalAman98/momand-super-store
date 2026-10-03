@@ -163,6 +163,8 @@ class POSSale(models.Model):
         on_delete=models.SET_NULL,
         related_name="pos_purchases",
     )
+    customer_name = models.CharField(max_length=180, blank=True)
+    customer_phone = models.CharField(max_length=40, blank=True)
     currency = models.CharField(max_length=12)
     subtotal = models.DecimalField(
         max_digits=14,
@@ -202,6 +204,11 @@ class POSSale(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        permissions = [
+            ("view_possale_all", "Can view all POS sales"),
+            ("view_dashboard", "Can view the business dashboard"),
+            ("view_financialreport", "Can view financial reports"),
+        ]
         indexes = [
             models.Index(fields=["created_at", "cashier"]),
             models.Index(fields=["created_at", "payment_method"]),

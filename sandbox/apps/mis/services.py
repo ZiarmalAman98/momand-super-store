@@ -1,11 +1,12 @@
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from uuid import uuid4
 
-from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q, Sum
 from django.utils import timezone
 from oscar.core.loading import get_model
+from apps.storefront.models import current_store_settings
 
 from .models import CashierShift, PaymentTransaction, POSSale, POSSaleItem, POSSaleReturn, POSSaleReturnItem, OnlineOrderCost, Purchase, PurchaseItem, StockMovement
 
@@ -88,7 +89,7 @@ def _lock_stock_records(record_ids):
 
 
 @transaction.atomic
-def create_pos_sale(*, cashier, items, payment_method=None, amount_tendered=None, customer_id=None, payment_lines=None):
+def create_pos_sale(*, cashier, items, payment_method=None, amount_tendered=None, customer_id=None, customer_name="", customer_phone="", payment_lines=None):
     if not isinstance(items, list) or not items:
         raise ValidationError({"items": "Add at least one product to the sale."})
     if any(not isinstance(item, dict) for item in items):
@@ -118,6 +119,8 @@ def create_pos_sale(*, cashier, items, payment_method=None, amount_tendered=None
         if payment_method not in allowed_methods:
             raise ValidationError({"payment_method": "Choose cash, card, or bank transfer."})
         tendered = _decimal(amount_tendered, "amount_tendered")
+        if tendered <= 0:
+            raise ValidationError({"amount_tendered": "Enter an amount greater than zero."})
         normalized_lines = [(payment_method, _decimal(amount_tendered, "amount_tendered"), tendered)]
     customer = None
     if customer_id:
@@ -160,22 +163,40 @@ def create_pos_sale(*, cashier, items, payment_method=None, amount_tendered=None
         raise ValidationError({"items": "Sale total exceeds the supported currency range."})
 
     try:
-        tax_rate = Decimal(str(getattr(settings, "STORE_TAX_RATE", "0")))
+        store_config = current_store_settings()
+        configured_rate = store_config["tax_rate"] if isinstance(store_config, dict) else store_config.tax_rate
+        tax_rate = Decimal(str(configured_rate))
     except InvalidOperation:
-        raise ValidationError({"tax": "STORE_TAX_RATE must be a decimal fraction."})
+        raise ValidationError({"tax": "Tax rate must be a decimal fraction."})
     if tax_rate < 0 or tax_rate > 1:
-        raise ValidationError({"tax": "STORE_TAX_RATE must be between 0 and 1."})
+        raise ValidationError({"tax": "Tax rate must be between 0 and 1."})
     line_taxes = {record.pk: (price * tax_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) for _product, record, _quantity, price, _line_total in prepared}
     tax = sum((line_taxes[record.pk] * quantity for _product, record, quantity, _price, _line_total in prepared), Decimal("0.00"))
     total = subtotal + tax
+    if payment_lines is None:
+        method, _amount, line_tendered = normalized_lines[0]
+        if method != POSSale.PAYMENT_CASH and line_tendered > total:
+            raise ValidationError({"amount_tendered": "Card and bank-transfer payments cannot exceed the sale total."})
+        normalized_lines = [(method, min(line_tendered, total) if method == POSSale.PAYMENT_CASH else line_tendered, line_tendered)]
     applied_total = sum((amount for _method, amount, _tendered in normalized_lines), Decimal("0.00"))
     cash_change = sum((tendered - amount for method, amount, tendered in normalized_lines if method == POSSale.PAYMENT_CASH), Decimal("0.00"))
-    if applied_total != total:
-        raise ValidationError({"payment_lines": f"Payment total must equal {total}."})
+    if applied_total <= 0:
+        raise ValidationError({"amount_tendered": "Enter an amount greater than zero."})
+    if applied_total > total:
+        raise ValidationError({"payment_lines": f"Payment total cannot exceed {total}."})
+    customer_name = str(customer_name or "").strip()
+    customer_phone = str(customer_phone or "").strip()
+    if len(customer_name) > 180:
+        raise ValidationError({"customer_name": "Customer name must be 180 characters or fewer."})
+    if len(customer_phone) > 40:
+        raise ValidationError({"customer_phone": "Customer phone must be 40 characters or fewer."})
+    if applied_total < total and (not customer_name or not customer_phone):
+        raise ValidationError({"customer": "Enter the customer's name and phone number to record the remaining balance."})
     tendered_total = sum((tendered for _method, _amount, tendered in normalized_lines), Decimal("0.00"))
 
     sale = POSSale.objects.create(
-        cashier=cashier, customer=customer, currency=currency,
+        cashier=cashier, customer=customer, customer_name=customer_name,
+        customer_phone=customer_phone, currency=currency,
         subtotal=subtotal, tax=tax, total=total,
         payment_method=payment_method, amount_tendered=tendered_total, change_due=cash_change,
     )
@@ -211,6 +232,53 @@ def create_pos_sale(*, cashier, items, payment_method=None, amount_tendered=None
             quantity_after=max(0, record.net_stock_level or 0),
             reference=sale.invoice_number, created_by=cashier,
         )
+    return sale
+
+
+@transaction.atomic
+def collect_pos_balance(*, invoice_number, received_by, payment_method, amount_tendered):
+    allowed_methods = {POSSale.PAYMENT_CASH, POSSale.PAYMENT_CARD, POSSale.PAYMENT_TRANSFER}
+    if payment_method not in allowed_methods:
+        raise ValidationError({"payment_method": "Choose cash, card, or bank transfer."})
+    try:
+        sale = POSSale.objects.select_for_update().get(invoice_number=invoice_number)
+    except POSSale.DoesNotExist:
+        raise ValidationError({"invoice_number": "POS sale was not found."})
+
+    amount_paid = PaymentTransaction.objects.filter(
+        sale=sale, status=PaymentTransaction.STATUS_PAID,
+    ).aggregate(value=Sum("amount"))["value"] or Decimal("0.00")
+    balance_due = max(Decimal("0.00"), sale.total - amount_paid)
+    if balance_due <= 0:
+        raise ValidationError({"invoice_number": "This sale has no remaining balance."})
+
+    tendered = _decimal(amount_tendered, "amount_tendered")
+    if tendered <= 0:
+        raise ValidationError({"amount_tendered": "Enter an amount greater than zero."})
+    if payment_method != POSSale.PAYMENT_CASH and tendered > balance_due:
+        raise ValidationError({"amount_tendered": f"Payment cannot exceed the remaining balance of {balance_due}."})
+
+    applied_amount = min(tendered, balance_due)
+    change = tendered - applied_amount if payment_method == POSSale.PAYMENT_CASH else Decimal("0.00")
+    previous_methods = set(PaymentTransaction.objects.filter(
+        sale=sale, status=PaymentTransaction.STATUS_PAID,
+    ).values_list("method", flat=True))
+    PaymentTransaction.objects.create(
+        transaction_ref=f"PAY-{sale.invoice_number}-{uuid4().hex[:8].upper()}",
+        sale=sale,
+        method=payment_method,
+        status=PaymentTransaction.STATUS_PAID,
+        amount=applied_amount,
+        gateway="pos-balance",
+        note=f"Balance payment for {sale.invoice_number}",
+        created_by=received_by,
+        paid_at=timezone.now(),
+    )
+    sale.amount_tendered += tendered
+    sale.change_due += change
+    if previous_methods and payment_method not in previous_methods:
+        sale.payment_method = POSSale.PAYMENT_SPLIT
+    sale.save(update_fields=["amount_tendered", "change_due", "payment_method"])
     return sale
 
 

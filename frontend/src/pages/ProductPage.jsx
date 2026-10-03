@@ -1,7 +1,7 @@
 import { ArrowLeft, Check, ShoppingBasket } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { api } from '../services/api'
+import { api, mediaUrl } from '../services/api'
 
 export default function ProductPage() {
   const { slug } = useParams()
@@ -16,10 +16,10 @@ export default function ProductPage() {
   }
   if (error) return <section className="site-container page-section"><div className="state-card error-state">{error}</div></section>
   if (!product) return <section className="site-container page-section"><div className="product-skeleton detail-skeleton" /></section>
-  const image = product.image?.startsWith('/') ? product.image : product.image ? `/media/${product.image}` : null
+  const image = mediaUrl(product.image) || '/media/image_not_found.jpg'
   const price = product.price ? new Intl.NumberFormat(undefined, { style: 'currency', currency: product.currency || 'AFN' }).format(product.price) : 'Price unavailable'
   return <section className="site-container page-section"><Link className="back-link" to="/shop"><ArrowLeft size={16} /> Back to shop</Link>
-    <div className="product-detail"><div className="detail-image">{image ? <img src={image} alt={product.title} /> : <div className="image-placeholder">{product.title.slice(0, 1)}</div>}</div>
+    <div className="product-detail"><div className="detail-image"><img src={image} alt={product.title} onError={event => { event.currentTarget.onerror = null; event.currentTarget.src = '/media/image_not_found.jpg' }} /></div>
       <div className="detail-info"><span className="eyebrow">{product.category_names?.[0] || 'MOMAND STORE'}</span><h1>{product.title}</h1><div className="detail-price">{price}</div><div className={product.in_stock ? 'detail-stock in-stock' : 'detail-stock out-stock'}>{product.in_stock ? <><Check size={16} /> Available</> : 'Currently unavailable'}</div>
         {product.description && <div className="detail-description">{product.description}</div>}
         {product.upc && <div className="detail-meta"><span>Barcode</span><strong>{product.upc}</strong></div>}

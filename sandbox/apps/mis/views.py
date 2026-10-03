@@ -1,4 +1,4 @@
-from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.auth.decorators import permission_required
 from django.db.models import Sum
 from django.shortcuts import render
 from django.utils import timezone
@@ -10,7 +10,7 @@ Order = get_model("order", "Order")
 StockRecord = get_model("partner", "StockRecord")
 
 
-@staff_member_required
+@permission_required("mis.view_dashboard")
 def dashboard(request):
     today = timezone.localdate()
     month_start = today.replace(day=1)

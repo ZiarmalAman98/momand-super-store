@@ -1,15 +1,26 @@
+import io
+import tempfile
+import zipfile
+from pathlib import Path
+from uuid import uuid4
+
 from django.conf import settings
+from django.core.management import call_command
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group, Permission
 from django.shortcuts import get_object_or_404
 from django.db import transaction, IntegrityError
 from django.core.exceptions import ObjectDoesNotExist
-from django.db.models import F, Q
+from django.db.models import F, Max, Q
 from django.db.models import Count, Sum
 from django.db.models.functions import Coalesce
+from django.http import FileResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.core.exceptions import ValidationError
 from rest_framework import generics, status, viewsets
 from rest_framework.views import APIView
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
@@ -21,7 +32,9 @@ from oscar.apps.checkout.calculators import OrderTotalCalculator
 from oscar.apps.order.utils import OrderCreator
 
 from .permissions import HasAnyMISPermission, StaffWriteCustomerReadOnly
+from .permissions import effective_staff_permissions
 from .serializers import (
+    AdminOrderSerializer,
     BasketLineSerializer,
     CategorySerializer,
     ContactMessageSerializer,
@@ -29,20 +42,33 @@ from .serializers import (
     OrderSerializer,
     POSSaleSerializer,
     ProductSerializer,
+    ProductImageUploadSerializer,
     PurchaseSerializer,
     StockMovementSerializer,
     SupplierSerializer,
     ExpenseSerializer,
     POSSaleReturnSerializer,
     POSSaleReturnCreateSerializer,
+    POSSaleCorrectionSerializer,
+    POSSaleCorrectionCreateSerializer,
+    POSSaleCorrectionRequestSerializer,
+    POSSaleCorrectionRequestCreateSerializer,
     PaymentTransactionSerializer,
     CashierShiftSerializer,
+    StaffUserSerializer,
+    StaffUserWriteSerializer,
+    StaffCustomerSerializer,
+    POSSaleCustomerSerializer,
+    StoreSettingsSerializer,
 )
 from .services import add_to_basket, get_session_basket
 from .permissions import HasMISPermission
 from apps.mis.models import CashierShift, Expense, OnlineOrderCost, PaymentTransaction, POSSale, POSSaleItem, POSSaleReturn, Purchase, StockMovement, Supplier
-from apps.mis.services import adjust_stock, close_cashier_shift, create_pos_sale, open_cashier_shift, process_pos_return, receive_purchase
+from apps.mis.services import adjust_stock, close_cashier_shift, collect_pos_balance, create_pos_sale, open_cashier_shift, process_pos_return, receive_purchase
+from apps.mis.sale_corrections import POSSaleCorrectionRequest
+from apps.mis.sale_correction_services import correct_pos_sale
 from apps.mis.accounting import financial_summary
+from apps.storefront.models import StoreSettings, current_store_settings
 
 Category = get_model("catalogue", "Category")
 Product = get_model("catalogue", "Product")
@@ -95,14 +121,200 @@ class StoreConfigView(APIView):
     permission_classes = (AllowAny,)
 
     def get(self, request):
+        config = current_store_settings()
+        methods = config["payment_methods"] if isinstance(config, dict) else config.payment_methods
+        instructions = config["bank_transfer_instructions"] if isinstance(config, dict) else config.bank_transfer_instructions
         return Response({
-            "name": settings.OSCAR_SHOP_NAME,
-            "currency": settings.OSCAR_DEFAULT_CURRENCY,
-            "tax_rate": str(settings.STORE_TAX_RATE),
-            "phone": settings.STORE_PHONE,
-            "email": settings.STORE_EMAIL,
-            "address": settings.STORE_ADDRESS,
+            "name": config["store_name"] if isinstance(config, dict) else config.store_name,
+            "tagline": config["tagline"] if isinstance(config, dict) else config.tagline,
+            "currency": config["currency"] if isinstance(config, dict) else config.currency,
+            "tax_rate": str(config["tax_rate"] if isinstance(config, dict) else config.tax_rate),
+            "phone": config["phone"] if isinstance(config, dict) else config.phone,
+            "email": config["email"] if isinstance(config, dict) else config.email,
+            "address": config["address"] if isinstance(config, dict) else config.address,
+            "payment_methods": [
+                {"code": code, "name": StoreSettings.PAYMENT_METHODS[code]}
+                for code in methods if code in StoreSettings.PAYMENT_METHODS
+            ],
+            "bank_transfer_instructions": instructions if "bank_transfer" in methods else "",
         })
+
+
+class StoreSettingsView(APIView):
+    permission_classes = (HasMISPermission,)
+    required_permission = "storefront.change_storesettings"
+
+    def get_object(self):
+        defaults = current_store_settings()
+        if isinstance(defaults, StoreSettings):
+            defaults = {field: getattr(defaults, field) for field in (
+                "store_name", "tagline", "currency", "tax_rate", "phone", "email", "address",
+                "payment_methods", "bank_transfer_instructions",
+            )}
+        obj, _ = StoreSettings.objects.get_or_create(pk=1, defaults=defaults)
+        return obj
+
+    def get(self, request):
+        serializer = StoreSettingsSerializer(self.get_object())
+        return Response(serializer.data)
+
+    def patch(self, request):
+        serializer = StoreSettingsSerializer(self.get_object(), data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+
+class OnlineOrderListView(generics.ListAPIView):
+    permission_classes = (HasMISPermission,)
+    required_permission = "order.view_order"
+    serializer_class = AdminOrderSerializer
+
+    def get_queryset(self):
+        queryset = Order.objects.select_related("user", "shipping_address", "shipping_address__country").prefetch_related(
+            "lines__product__images", "payment_transactions",
+        ).order_by("-date_placed")
+        status_filter = self.request.query_params.get("status")
+        search = self.request.query_params.get("search", "").strip()[:120]
+        if status_filter:
+            queryset = queryset.filter(status__iexact=status_filter)
+        if search:
+            queryset = queryset.filter(
+                Q(number__icontains=search)
+                | Q(user__email__icontains=search)
+                | Q(shipping_address__first_name__icontains=search)
+                | Q(shipping_address__last_name__icontains=search)
+                | Q(shipping_address__phone_number__icontains=search)
+            ).distinct()
+        return queryset
+
+
+class StaffCustomerListView(generics.ListAPIView):
+    permission_classes = (HasMISPermission,)
+    required_permission = "customer.view_user"
+    serializer_class = StaffCustomerSerializer
+
+    def get_queryset(self):
+        queryset = get_user_model().objects.filter(is_staff=False).order_by("-date_joined")
+        search = self.request.query_params.get("search", "").strip()[:120]
+        if search:
+            queryset = queryset.filter(
+                Q(email__icontains=search)
+                | Q(first_name__icontains=search)
+                | Q(last_name__icontains=search)
+            )
+        return queryset
+
+
+class POSSaleCustomerListView(generics.ListAPIView):
+    permission_classes = (HasMISPermission,)
+    required_permission = "mis.view_possale_all"
+    serializer_class = POSSaleCustomerSerializer
+
+    def get_queryset(self):
+        queryset = POSSale.objects.exclude(Q(customer_name="") & Q(customer_phone="")).values(
+            "customer_name", "customer_phone",
+        ).annotate(
+            sales_count=Count("pk"),
+            total_spent=Sum("total"),
+            last_sale=Max("created_at"),
+        ).order_by("-last_sale")
+        search = self.request.query_params.get("search", "").strip()[:120]
+        if search:
+            queryset = queryset.filter(Q(customer_name__icontains=search) | Q(customer_phone__icontains=search))
+        return queryset
+
+
+class ProductImageUploadView(APIView):
+    permission_classes = (IsAuthenticated,)
+    parser_classes = (MultiPartParser, FormParser)
+
+    def post(self, request, product_id):
+        if not request.user.is_staff or not (
+            request.user.has_perm("catalogue.change_product")
+            or request.user.groups.filter(name__in=("Admin", "Super Admin")).exists()
+        ):
+            return Response({"detail": "You do not have permission to update product images."}, status=403)
+        ProductImage = get_model("catalogue", "ProductImage")
+        product = get_object_or_404(Product, pk=product_id)
+        serializer = ProductImageUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        image = serializer.validated_data["image"]
+        ProductImage.objects.filter(product=product).update(display_order=F("display_order") + 1)
+        saved = ProductImage.objects.create(product=product, original=image, display_order=0)
+        return Response({"product_id": product.pk, "image": saved.original.url}, status=201)
+
+
+class StoreBackupDownloadView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request):
+        if not request.user.is_superuser:
+            return Response({"detail": "Only a superuser can download a full store backup."}, status=403)
+        output = tempfile.TemporaryFile(mode="w+b")
+        with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
+            with archive.open("database.json", "w") as binary_stream:
+                text_stream = io.TextIOWrapper(binary_stream, encoding="utf-8")
+                call_command(
+                    "dumpdata", "--natural-foreign", "--natural-primary",
+                    "--exclude=contenttypes", "--exclude=auth.permission", "--exclude=sessions",
+                    "--exclude=token_blacklist", "--indent=2",
+                    stdout=text_stream,
+                )
+                text_stream.flush()
+                text_stream.detach()
+            media_root = Path(settings.MEDIA_ROOT)
+            if media_root.exists():
+                for path in media_root.rglob("*"):
+                    if path.is_file():
+                        archive.write(path, f"media/{path.relative_to(media_root).as_posix()}")
+            archive.writestr("README.txt", "Momand Super Store backup\n\nContains database.json and uploaded media files. Keep this archive private. Restore the database with Django loaddata after migrating, then copy the media folder into MEDIA_ROOT.\n")
+        output.seek(0)
+        filename = f"momand-store-backup-{timezone.localtime():%Y%m%d-%H%M%S}.zip"
+        return FileResponse(output, as_attachment=True, filename=filename, content_type="application/zip")
+
+
+class StaffUsersView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def _allowed(self, user, verb):
+        return user.is_superuser or (user.is_staff and (
+            user.has_perm(f"auth.{verb}_user")
+            or user.groups.filter(name__in=("Admin", "Super Admin")).exists()
+        ))
+
+    def get(self, request):
+        if not self._allowed(request.user, "view"):
+            return Response({"detail": "You do not have permission to manage staff users."}, status=403)
+        User = get_user_model()
+        users = User.objects.filter(is_staff=True).prefetch_related("groups", "user_permissions").order_by("email")
+        groups = Group.objects.exclude(name="Customer")
+        if not request.user.is_superuser:
+            groups = groups.exclude(name="Super Admin")
+        groups = groups.order_by("name")
+        permissions = Permission.objects.exclude(content_type__app_label__in=("auth", "contenttypes", "sessions")).select_related("content_type").order_by("content_type__app_label", "codename")
+        return Response({
+            "users": StaffUserSerializer(users, many=True).data,
+            "roles": [{"id": group.pk, "name": group.name} for group in groups],
+            "permissions": [{"code": f"{perm.content_type.app_label}.{perm.codename}", "name": str(perm), "module": perm.content_type.app_label} for perm in permissions],
+        })
+
+    def post(self, request):
+        if not self._allowed(request.user, "add"):
+            return Response({"detail": "You do not have permission to add staff users."}, status=403)
+        serializer = StaffUserWriteSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        return Response(StaffUserSerializer(user).data, status=201)
+
+    def patch(self, request, user_id):
+        if not self._allowed(request.user, "change"):
+            return Response({"detail": "You do not have permission to change staff users."}, status=403)
+        User = get_user_model()
+        user = get_object_or_404(User, pk=user_id, is_staff=True, is_superuser=False)
+        serializer = StaffUserWriteSerializer(user, data=request.data, partial=True, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        return Response(StaffUserSerializer(serializer.save()).data)
 
 
 class CountryListView(APIView):
@@ -138,6 +350,11 @@ class CurrentUserView(generics.GenericAPIView):
             "first_name": user.first_name,
             "last_name": user.last_name,
             "is_staff": user.is_staff,
+            "is_superuser": user.is_superuser,
+            "groups": list(user.groups.values_list("name", flat=True)),
+            "permissions": effective_staff_permissions(user),
+            "can_manage_users": bool(user.is_superuser or user.has_perm("auth.view_user") or user.groups.filter(name__in=("Admin", "Super Admin")).exists()),
+            "can_correct_sales": bool(user.is_staff and user.has_perm("mis.change_possale")),
         })
 
 
@@ -148,7 +365,9 @@ class CustomerOrderViewSet(viewsets.ReadOnlyModelViewSet):
     lookup_url_kwarg = "number"
 
     def get_queryset(self):
-        return Order.objects.filter(user=self.request.user).prefetch_related("lines").order_by("-date_placed")
+        return Order.objects.filter(user=self.request.user).prefetch_related(
+            "lines__product__images", "payment_transactions",
+        ).order_by("-date_placed")
 
 
 class BasketView(generics.GenericAPIView):
@@ -243,9 +462,11 @@ class CheckoutView(APIView):
         errors = {field: "This field is required." for field in required if not str(data.get(field, "")).strip()}
         if errors:
             return Response(errors, status=400)
-        method = data.get("payment_method", "cod")
-        if method != "cod":
-            return Response({"payment_method": "Cash on delivery is the only configured checkout payment method."}, status=400)
+        method = str(data.get("payment_method", "cod"))
+        config = current_store_settings()
+        enabled_methods = config["payment_methods"] if isinstance(config, dict) else config.payment_methods
+        if method not in enabled_methods:
+            return Response({"payment_method": "Choose one of the payment methods currently offered by the store."}, status=400)
         try:
             country = Country.objects.get(iso_3166_1_a2=str(data["country"]).upper())
         except Country.DoesNotExist:
@@ -297,6 +518,16 @@ class CheckoutView(APIView):
                     user=request.user,
                     shipping_address=address,
                     request=request,
+                )
+
+                PaymentTransaction.objects.create(
+                    transaction_ref=f"WEB-{order.number}-{uuid4().hex[:8].upper()}",
+                    order=order,
+                    method=method,
+                    status=PaymentTransaction.STATUS_PENDING,
+                    amount=order.total_incl_tax,
+                    note="Awaiting payment confirmation.",
+                    created_by=request.user,
                 )
 
                 # Oscar creates the order, while this custom ledger snapshots
@@ -360,16 +591,35 @@ class POSSaleListView(generics.ListAPIView):
     permission_classes = (HasMISPermission,)
     required_permission = "mis.view_possale"
     serializer_class = POSSaleSerializer
-    queryset = POSSale.objects.prefetch_related("items__return_items").select_related("cashier")
+    queryset = POSSale.objects.prefetch_related("items__return_items", "payment_transactions").select_related("cashier", "customer")
     filterset_fields = ("payment_method", "cashier")
     ordering_fields = ("created_at", "total")
     ordering = ("-created_at",)
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        if not (self.request.user.is_superuser or self.request.user.has_perm("mis.change_possale") or self.request.user.has_perm("mis.delete_possale")):
+        if not self.request.user.has_perm("mis.view_possale_all"):
             queryset = queryset.filter(cashier=self.request.user)
         return queryset
+
+
+class POSSaleOutstandingBalancesView(APIView):
+    permission_classes = (HasMISPermission,)
+    required_permission = "mis.view_possale"
+
+    def get(self, request):
+        from decimal import Decimal
+
+        sales = POSSale.objects.annotate(
+            amount_paid=Coalesce(
+                Sum("payment_transactions__amount", filter=Q(payment_transactions__status=PaymentTransaction.STATUS_PAID)),
+                Decimal("0.00"),
+            ),
+        ).annotate(balance_due=F("total") - F("amount_paid")).filter(balance_due__gt=0)
+        sales = sales.select_related("cashier", "customer").prefetch_related(
+            "items__return_items", "payment_transactions",
+        ).order_by("-created_at")
+        return Response(POSSaleSerializer(sales, many=True).data)
 
 
 class POSSaleCreateView(APIView):
@@ -385,6 +635,8 @@ class POSSaleCreateView(APIView):
                 amount_tendered=request.data.get("amount_tendered"),
                 payment_lines=request.data.get("payment_lines"),
                 customer_id=request.data.get("customer_id"),
+                customer_name=request.data.get("customer_name", ""),
+                customer_phone=request.data.get("customer_phone", ""),
             )
         except drf_serializers.ValidationError as exc:
             return Response(exc.detail, status=400)
@@ -395,14 +647,31 @@ class POSSaleDetailView(generics.RetrieveAPIView):
     permission_classes = (HasMISPermission,)
     required_permission = "mis.view_possale"
     serializer_class = POSSaleSerializer
-    queryset = POSSale.objects.prefetch_related("items__return_items").select_related("cashier")
+    queryset = POSSale.objects.prefetch_related("items__return_items", "payment_transactions").select_related("cashier", "customer")
     lookup_field = "invoice_number"
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        if not (self.request.user.is_superuser or self.request.user.has_perm("mis.change_possale") or self.request.user.has_perm("mis.delete_possale")):
+        if not self.request.user.has_perm("mis.view_possale_all"):
             queryset = queryset.filter(cashier=self.request.user)
         return queryset
+
+
+class POSSaleBalancePaymentView(APIView):
+    permission_classes = (HasMISPermission,)
+    required_permission = "mis.view_possale"
+
+    def post(self, request, invoice_number):
+        try:
+            sale = collect_pos_balance(
+                invoice_number=invoice_number,
+                received_by=request.user,
+                payment_method=request.data.get("payment_method"),
+                amount_tendered=request.data.get("amount_tendered"),
+            )
+        except drf_serializers.ValidationError as exc:
+            return Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+        return Response(POSSaleSerializer(sale).data)
 
 
 class POSSaleReturnCreateView(APIView):
@@ -438,6 +707,25 @@ class PaymentTransactionListView(generics.ListAPIView):
     filterset_fields = ("method", "status", "gateway")
     ordering_fields = ("created_at", "amount")
     ordering = ("-created_at",)
+
+
+class PaymentTransactionUpdateView(APIView):
+    permission_classes = (HasMISPermission,)
+    required_permission = "mis.change_paymenttransaction"
+
+    def patch(self, request, transaction_ref):
+        payment = get_object_or_404(PaymentTransaction, transaction_ref=transaction_ref)
+        if payment.status != PaymentTransaction.STATUS_PENDING:
+            return Response({"detail": "Only pending payments can be marked received."}, status=400)
+        if request.data.get("status") != PaymentTransaction.STATUS_PAID:
+            return Response({"status": "Set the status to paid to confirm receipt."}, status=400)
+        payment.status = PaymentTransaction.STATUS_PAID
+        payment.paid_at = timezone.now()
+        note = str(request.data.get("note", "")).strip()
+        if note:
+            payment.note = note[:240]
+        payment.save(update_fields=["status", "paid_at", "note"])
+        return Response(PaymentTransactionSerializer(payment).data)
 
 
 class SupplierViewSet(viewsets.ModelViewSet):
@@ -627,8 +915,8 @@ class CashierShiftCloseView(APIView):
         return Response(CashierShiftSerializer(closed).data)
 
 class DashboardSummaryView(APIView):
-    permission_classes = (HasAnyMISPermission,)
-    required_permissions = ("mis.view_possale", "mis.view_purchase", "mis.view_expense", "mis.view_stockmovement")
+    permission_classes = (HasMISPermission,)
+    required_permission = "mis.view_dashboard"
 
     def get(self, request):
         from datetime import timedelta
@@ -642,34 +930,40 @@ class DashboardSummaryView(APIView):
         can_view_sales = request.user.has_perm("mis.view_possale")
         can_view_purchases = request.user.has_perm("mis.view_purchase")
         can_view_expenses = request.user.has_perm("mis.view_expense")
-        is_cashier = request.user.groups.filter(name="Cashier").exists() and not request.user.is_superuser
-        if is_cashier:
+        can_view_all_sales = request.user.has_perm("mis.view_possale_all")
+        if not can_view_all_sales:
             sales = sales.filter(cashier=request.user)
         today_sales = sales.filter(created_at__date=today)
         month_sales = sales.filter(created_at__date__gte=month_start)
-        online_today = Order.objects.filter(date_placed__date=today) if can_view_sales and not is_cashier else Order.objects.none()
-        online_month = Order.objects.filter(date_placed__date__gte=month_start) if can_view_sales and not is_cashier else Order.objects.none()
-        stock_records = get_model("partner", "StockRecord").objects.filter(
+        online_today = Order.objects.filter(date_placed__date=today) if can_view_sales and can_view_all_sales else Order.objects.none()
+        online_month = Order.objects.filter(date_placed__date__gte=month_start) if can_view_sales and can_view_all_sales else Order.objects.none()
+        stock_records = get_model("partner", "StockRecord").objects.select_related("product").filter(
             low_stock_threshold__isnull=False, num_in_stock__isnull=False,
         )
-        low_stock = [row for row in stock_records.only("num_in_stock", "num_allocated", "low_stock_threshold") if max(0, row.net_stock_level or 0) <= row.low_stock_threshold]
+        low_stock = []
+        low_stock_count = 0
+        for row in stock_records.only("product__title", "partner_sku", "num_in_stock", "num_allocated", "low_stock_threshold").order_by("num_in_stock"):
+            available = max(0, row.net_stock_level or 0)
+            if available <= row.low_stock_threshold:
+                low_stock_count += 1
+                if len(low_stock) < 12:
+                    low_stock.append({"product": row.product.title, "sku": row.partner_sku, "available": available, "threshold": row.low_stock_threshold})
         days = [today - timedelta(days=offset) for offset in reversed(range(7))]
         daily = []
         if can_view_sales:
             for day in days:
                 amount = sales.filter(created_at__date=day).aggregate(value=Sum("total"))["value"] or Decimal("0.00")
-                if not is_cashier:
+                if can_view_all_sales:
                     amount += Order.objects.filter(date_placed__date=day).aggregate(value=Sum("total_incl_tax"))["value"] or Decimal("0.00")
                 daily.append({"date": day.isoformat(), "sales": str(amount)})
-        result = {
-            "currency": settings.OSCAR_DEFAULT_CURRENCY,
-            "products": Product.objects.count(),
-            "low_stock_products": len(low_stock),
-            "suppliers": Supplier.objects.filter(is_active=True).count(),
-        }
+        result = {"currency": settings.OSCAR_DEFAULT_CURRENCY}
+        if request.user.has_perm("catalogue.view_product"):
+            result["products"] = Product.objects.count()
+        if request.user.has_perm("mis.view_supplier"):
+            result["suppliers"] = Supplier.objects.filter(is_active=True).count()
         if can_view_sales:
             top_items = POSSaleItem.objects.all()
-            if is_cashier:
+            if not can_view_all_sales:
                 top_items = top_items.filter(sale__cashier=request.user)
             top_products = top_items.values("title").annotate(quantity=Sum("quantity"), revenue=Sum("line_total")).order_by("-quantity")[:5]
             payment_methods = sales.values("payment_method").annotate(count=Count("id"), amount=Sum("total")).order_by("payment_method")
@@ -680,9 +974,55 @@ class DashboardSummaryView(APIView):
                 "month_transactions": month_sales.count() + online_month.count(),
                 "daily_sales": daily, "top_products": list(top_products), "payment_methods": list(payment_methods),
             })
-            if not is_cashier:
+            outstanding = POSSale.objects.annotate(
+                amount_paid=Coalesce(
+                    Sum("payment_transactions__amount", filter=Q(payment_transactions__status=PaymentTransaction.STATUS_PAID)),
+                    Decimal("0.00"),
+                ),
+            ).annotate(balance_due=F("total") - F("amount_paid")).filter(balance_due__gt=0)
+            balance_amounts = list(outstanding.values_list("total", "amount_paid"))
+            result["outstanding_balance_total"] = str(
+                sum((total - paid for total, paid in balance_amounts), Decimal("0.00"))
+            )
+            result["outstanding_balance_count"] = len(balance_amounts)
+            result["outstanding_balances"] = [{
+                "invoice_number": sale.invoice_number,
+                "customer_name": sale.customer_name or (sale.customer.get_full_name() if sale.customer_id else ""),
+                "customer_phone": sale.customer_phone,
+                "cashier": sale.cashier.get_full_name() or sale.cashier.email or sale.cashier.get_username(),
+                "created_at": sale.created_at,
+                "total": str(sale.total),
+                "amount_paid": str(sale.amount_paid),
+                "balance_due": str(sale.balance_due),
+                "currency": sale.currency,
+            } for sale in outstanding.select_related("cashier", "customer").order_by("-created_at")[:10]]
+            if can_view_all_sales:
                 result["total_orders"] = Order.objects.count()
                 result["pending_orders"] = Order.objects.filter(status__iexact="Pending").count()
+            recent = sales.select_related("cashier").prefetch_related("items").order_by("-created_at")[:10]
+            result["recent_sales"] = [{
+                "invoice_number": sale.invoice_number,
+                "cashier": sale.cashier.get_full_name() or sale.cashier.email or sale.cashier.get_username(),
+                "created_at": sale.created_at,
+                "total": str(sale.total),
+                "currency": sale.currency,
+                "items": [{"title": item.title, "quantity": item.quantity} for item in sale.items.all()],
+            } for sale in recent]
+            cashier_rows = sales.filter(created_at__date=today).values(
+                "cashier_id", "cashier__first_name", "cashier__last_name", "cashier__email"
+            ).annotate(transactions=Count("id"), total=Sum("total")).order_by("-total")
+            result["cashier_sales"] = [{
+                "cashier": (row["cashier__first_name"] + (" " if row["cashier__last_name"] else "") + row["cashier__last_name"]) or row["cashier__email"],
+                "transactions": row["transactions"],
+                "units": POSSaleItem.objects.filter(sale__cashier_id=row["cashier_id"], sale__created_at__date=today).aggregate(value=Sum("quantity"))["value"] or 0,
+                "total": str(row["total"] or Decimal("0.00")),
+            } for row in cashier_rows]
+        if request.user.has_perm("partner.view_stockrecord"):
+            result["low_stock_products"] = low_stock_count
+            result["low_stock"] = low_stock
+        if request.user.has_perm("mis.change_possale"):
+            pending = POSSaleCorrectionRequest.objects.filter(is_resolved=False).select_related("sale__cashier", "requested_by")[:20]
+            result["correction_requests"] = POSSaleCorrectionRequestSerializer(pending, many=True).data
         if can_view_purchases:
             result["purchases_month"] = str(Purchase.objects.filter(purchased_at__gte=month_start).aggregate(value=Sum("total_cost"))["value"] or Decimal("0.00"))
         if can_view_expenses:
@@ -692,8 +1032,8 @@ class DashboardSummaryView(APIView):
 
 
 class FinancialReportView(APIView):
-    permission_classes = (HasAnyMISPermission,)
-    required_permissions = ("mis.view_possale", "mis.view_purchase", "mis.view_expense")
+    permission_classes = (HasMISPermission,)
+    required_permission = "mis.view_financialreport"
 
     def get(self, request):
         start_date = parse_date(request.query_params.get("start_date", "")) if request.query_params.get("start_date") else None
@@ -707,3 +1047,41 @@ class FinancialReportView(APIView):
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(report)
+
+
+class POSSaleCorrectionRequestCreateView(APIView):
+    permission_classes = (HasMISPermission,)
+    required_permission = "mis.view_possale"
+
+    def post(self, request, invoice_number):
+        sale = get_object_or_404(POSSale, invoice_number=invoice_number)
+        if sale.cashier_id != request.user.pk and not request.user.has_perm("mis.view_possale_all"):
+            return Response({"detail": "You can request a correction only for your own sale."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = POSSaleCorrectionRequestCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        if POSSaleCorrectionRequest.objects.filter(sale=sale, is_resolved=False).exists():
+            return Response({"detail": "A correction request is already open for this sale."}, status=status.HTTP_409_CONFLICT)
+        correction_request = POSSaleCorrectionRequest.objects.create(
+            sale=sale, requested_by=request.user, reason=serializer.validated_data["reason"]
+        )
+        return Response(POSSaleCorrectionRequestSerializer(correction_request).data, status=status.HTTP_201_CREATED)
+
+
+class POSSaleCorrectionCreateView(APIView):
+    permission_classes = (HasMISPermission,)
+    required_permission = "mis.change_possale"
+
+    def post(self, request, invoice_number):
+        serializer = POSSaleCorrectionCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            correction = correct_pos_sale(
+                invoice_number=invoice_number,
+                processed_by=request.user,
+                **serializer.validated_data,
+            )
+        except POSSale.DoesNotExist:
+            return Response({"detail": "Sale invoice was not found."}, status=404)
+        except drf_serializers.ValidationError as exc:
+            return Response(exc.detail, status=400)
+        return Response(POSSaleCorrectionSerializer(correction).data, status=201)

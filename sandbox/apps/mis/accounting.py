@@ -1,8 +1,9 @@
 from decimal import Decimal
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 
 from django.conf import settings
 from django.db.models import Count, Sum
+from django.db.models.functions import TruncDate
 from django.utils import timezone
 
 from apps.mis.models import (
@@ -48,6 +49,49 @@ def financial_summary(*, start_date=None, end_date=None):
         status=Purchase.STATUS_RECEIVED,
     )
     expenses = Expense.objects.filter(spent_at__gte=start_date, spent_at__lte=end_date)
+
+    # Keep the report useful for a selected period while also exposing the
+    # day-by-day cash and sales activity that the dashboard needs.
+    daily = {}
+    day = start_date
+    while day <= end_date:
+        daily[day] = {
+            "date": day.isoformat(),
+            "pos_sales": Decimal("0.00"),
+            "pos_refunds": Decimal("0.00"),
+            "online_sales": Decimal("0.00"),
+            "expenses": Decimal("0.00"),
+            "purchases": Decimal("0.00"),
+            "pos_transactions": 0,
+            "online_orders": 0,
+            "refund_transactions": 0,
+        }
+        day += timedelta(days=1)
+
+    def add_daily(queryset, date_field, key, value_field, *, count_key=None):
+        rows = queryset.annotate(report_day=TruncDate(date_field)).values("report_day")
+        annotations = {"amount": Sum(value_field)}
+        if count_key:
+            annotations["count"] = Count("id")
+        for row in rows.annotate(**annotations):
+            bucket = daily.get(row["report_day"])
+            if bucket is None:
+                continue
+            bucket[key] = _money(row["amount"])
+            if count_key:
+                bucket[count_key] = row["count"]
+
+    def add_date_daily(queryset, date_field, key, value_field):
+        for row in queryset.values(date_field).annotate(amount=Sum(value_field)):
+            bucket = daily.get(row[date_field])
+            if bucket is not None:
+                bucket[key] = _money(row["amount"])
+
+    add_daily(pos_sales, "created_at", "pos_sales", "total", count_key="pos_transactions")
+    add_daily(pos_returns, "created_at", "pos_refunds", "refund_total", count_key="refund_transactions")
+    add_daily(online_orders, "date_placed", "online_sales", "total_incl_tax", count_key="online_orders")
+    add_date_daily(expenses, "spent_at", "expenses", "amount")
+    add_date_daily(purchases, "purchased_at", "purchases", "total_cost")
 
     # Revenue is reported before sales tax because tax collected is a liability,
     # not store revenue. Refunds are reduced by their pre-tax merchandise value.
@@ -174,6 +218,21 @@ def financial_summary(*, start_date=None, end_date=None):
             "net": str(cash_collected - cash_refunded),
         },
         "payment_breakdown": payment_breakdown,
+        "daily": [
+            {
+                **row,
+                "pos_sales": str(row["pos_sales"]),
+                "pos_refunds": str(row["pos_refunds"]),
+                "online_sales": str(row["online_sales"]),
+                "expenses": str(row["expenses"]),
+                "purchases": str(row["purchases"]),
+                "net_cash_activity": str(
+                    row["pos_sales"] + row["online_sales"]
+                    - row["pos_refunds"] - row["expenses"] - row["purchases"]
+                ),
+            }
+            for row in (daily[key] for key in sorted(daily, reverse=True))
+        ],
         "accounting_status": (
             "historical_cost_data_required"
             if missing_pos_cost_lines
