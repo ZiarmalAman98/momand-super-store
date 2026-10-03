@@ -1,4 +1,3 @@
-javascript
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 
 const BACKEND_ORIGIN =
@@ -13,16 +12,6 @@ export function setAccessToken(token) {
   accessToken = token
 }
 
-/**
- * Convert Django media/image paths into usable URLs.
- *
- * Examples:
- *   /media/product/image.jpg
- *   -> /media/product/image.jpg
- *
- *   http://127.0.0.1:8000/media/image.jpg
- *   -> same URL
- */
 export function mediaUrl(path) {
   if (!path) return ''
 
@@ -31,36 +20,45 @@ export function mediaUrl(path) {
   }
 
   if (path.startsWith('//')) {
-    return `${window.location.protocol}${path}`
+    return window.location.protocol + path
   }
 
   if (BACKEND_ORIGIN) {
-    return `${BACKEND_ORIGIN.replace(/\/$/, '')}${
-      path.startsWith('/') ? path : `/${path}`
-    }`
+    return (
+      BACKEND_ORIGIN.replace(/\/$/, '') +
+      (path.startsWith('/') ? path : '/' + path)
+    )
   }
 
-  return path.startsWith('/') ? path : `/${path}`
+  return path.startsWith('/') ? path : '/' + path
 }
 
 async function refreshAccessToken() {
-  const response = await fetch(`${API_BASE}/auth/token/refresh/`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: '{}',
-  })
+  const response = await fetch(
+    API_BASE + '/auth/token/refresh/',
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+    }
+  )
 
   if (!response.ok) {
     accessToken = null
     return false
   }
 
-  const data = await response.json()
-  accessToken = data.access
+  const data = await response.json().catch(() => null)
 
+  if (!data || !data.access) {
+    accessToken = null
+    return false
+  }
+
+  accessToken = data.access
   return true
 }
 
@@ -72,21 +70,21 @@ export async function apiRequest(path, options = {}, canRefresh = true) {
   }
 
   if (accessToken) {
-    headers.set('Authorization', `Bearer ${accessToken}`)
+    headers.set('Authorization', 'Bearer ' + accessToken)
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetch(API_BASE + path, {
     ...options,
     headers,
     credentials: 'include',
   })
 
-  if (
-    response.status === 401 &&
-    canRefresh &&
-    await refreshAccessToken()
-  ) {
-    return apiRequest(path, options, false)
+  if (response.status === 401 && canRefresh) {
+    const refreshed = await refreshAccessToken()
+
+    if (refreshed) {
+      return apiRequest(path, options, false)
+    }
   }
 
   const data =
@@ -96,25 +94,25 @@ export async function apiRequest(path, options = {}, canRefresh = true) {
 
   if (!response.ok) {
     const error = new Error(
-      data?.detail || 'The request could not be completed.'
+      data && data.detail
+        ? data.detail
+        : 'The request could not be completed.'
     )
 
     error.status = response.status
     error.data = data
-
     throw error
   }
 
   return data
 }
 
-export const api = {
-  // Storefront
+const api = {
   products: (query = '') =>
-    apiRequest(`/products/${query}`),
+    apiRequest('/products/' + query),
 
   product: (slug) =>
-    apiRequest(`/products/${encodeURIComponent(slug)}/`),
+    apiRequest('/products/' + encodeURIComponent(slug) + '/'),
 
   categories: () =>
     apiRequest('/categories/'),
@@ -125,7 +123,6 @@ export const api = {
   countries: () =>
     apiRequest('/countries/'),
 
-  // Cart
   cart: () =>
     apiRequest('/cart/'),
 
@@ -134,20 +131,20 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({
         product_id: productId,
-        quantity,
+        quantity: quantity,
       }),
     }),
 
   updateCartItem: (lineId, quantity) =>
-    apiRequest(`/cart/items/${lineId}/`, {
+    apiRequest('/cart/items/' + lineId + '/', {
       method: 'PATCH',
       body: JSON.stringify({
-        quantity,
+        quantity: quantity,
       }),
     }),
 
   removeCartItem: (lineId) =>
-    apiRequest(`/cart/items/${lineId}/`, {
+    apiRequest('/cart/items/' + lineId + '/', {
       method: 'DELETE',
     }),
 
@@ -157,10 +154,9 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
-  // POS
   posSearch: (term) =>
     apiRequest(
-      `/pos/products/?search=${encodeURIComponent(term)}`
+      '/pos/products/?search=' + encodeURIComponent(term)
     ),
 
   posSale: (payload) =>
@@ -174,31 +170,31 @@ export const api = {
 
   posSaleDetail: (invoice) =>
     apiRequest(
-      `/pos/sales/${encodeURIComponent(invoice)}/`
+      '/pos/sales/' + encodeURIComponent(invoice) + '/'
     ),
 
   correctPosSale: (invoice, payload) =>
     apiRequest(
-      `/pos/sales/${encodeURIComponent(invoice)}/correction/`,
+      '/pos/sales/' +
+        encodeURIComponent(invoice) +
+        '/correction/',
       {
         method: 'POST',
         body: JSON.stringify(payload),
       }
     ),
 
-  // Reports
   dashboard: () =>
     apiRequest('/reports/dashboard/'),
 
-  // Authentication
   login: (email, password) =>
     apiRequest(
       '/auth/token/',
       {
         method: 'POST',
         body: JSON.stringify({
-          email,
-          password,
+          email: email,
+          password: password,
         }),
       },
       false
@@ -220,7 +216,7 @@ export const api = {
       {
         method: 'POST',
         body: JSON.stringify({
-          email,
+          email: email,
         }),
       },
       false
@@ -251,7 +247,6 @@ export const api = {
       false
     ),
 
-  // Admin / Users
   users: () =>
     apiRequest('/admin/users/'),
 
@@ -262,12 +257,11 @@ export const api = {
     }),
 
   updateUser: (id, payload) =>
-    apiRequest(`/admin/users/${id}/`, {
+    apiRequest('/admin/users/' + id + '/', {
       method: 'PATCH',
       body: JSON.stringify(payload),
     }),
 
-  // Contact
   sendContact: (payload) =>
     apiRequest(
       '/contact/',
@@ -277,4 +271,10 @@ export const api = {
       },
       false
     ),
+}
+
+export {
+  api,
+  API_BASE,
+  BACKEND_ORIGIN,
 }
