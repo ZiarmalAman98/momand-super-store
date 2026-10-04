@@ -20,7 +20,7 @@ export default function AdminLayout() {
   const { user, ready, logout } = useAuth()
   const navigate = useNavigate()
   if (!ready) return <section className="site-container page-section"><div className="product-skeleton detail-skeleton" /></section>
-  if (!user?.is_staff || !user?.permissions?.admin_panel) return <Navigate to="/admin/login" replace />
+  if (!user?.is_staff || !user?.menuPermissions?.admin_panel) return <Navigate to="/admin/login" replace />
 
   async function signOut() {
     await logout()
@@ -31,7 +31,7 @@ export default function AdminLayout() {
     <aside className="admin-sidebar">
       <div className="admin-brand"><span className="brand-mark"><Store size={21} /></span><div><strong>Momand</strong><small>CONTROL PANEL</small></div></div>
       <nav className="admin-nav">
-        {links.filter(([, , , permission]) => user?.permissions?.[permission]).map(([path, label, Icon]) => <NavLink key={path} to={path} className={({ isActive }) => 'admin-nav-link' + (isActive ? ' active' : '')}><Icon size={18} /><span>{label}</span></NavLink>)}
+        {links.filter(([, , , permission]) => user?.menuPermissions?.[permission]).map(([path, label, Icon]) => <NavLink key={path} to={path} className={({ isActive }) => 'admin-nav-link' + (isActive ? ' active' : '')}><Icon size={18} /><span>{label}</span></NavLink>)}
       </nav>
       <button className="admin-logout" onClick={signOut}><LogOut size={17} /> Sign out</button>
     </aside>

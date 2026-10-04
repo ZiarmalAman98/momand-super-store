@@ -34,7 +34,7 @@ export default function POSPage() {
 
   if (!ready) return <main className="site-container page-section"><div className="product-skeleton detail-skeleton" /></main>
   if (!user) return <Navigate to="/login" replace />
-  if (!user.is_staff || !user.permissions?.pos) return <main className="site-container page-section"><div className="state-card"><strong>Access denied.</strong><p>Your account is not authorised to use POS.</p></div></main>
+  if (!user.is_staff || !user.menuPermissions?.pos) return <main className="site-container page-section"><div className="state-card"><strong>Access denied.</strong><p>Your account is not authorised to use POS.</p></div></main>
 
   function add(product) {
     if (!product.in_stock) { setError(`${product.title} is out of stock.`); return }

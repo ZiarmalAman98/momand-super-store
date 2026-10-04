@@ -19,7 +19,7 @@ export default function UsersPage() {
   async function load() {
     try { setData(await api.users()); setError('') } catch (err) { setError(err.message) }
   }
-  useEffect(() => { if (user?.permissions?.users) load() }, [user])
+  useEffect(() => { if (user?.menuPermissions?.users) load() }, [user])
 
   const available = data.available_permissions
   const editablePermissions = useMemo(() => available.filter(p => p.code !== 'auth.add_user' || user?.is_superuser || user?.permission_codes?.includes('auth.add_user')), [available, user])
@@ -66,7 +66,7 @@ export default function UsersPage() {
     catch (err) { setError(err.message) }
   }
 
-  if (!user?.permissions?.users) return <section className="site-container page-section"><div className="state-card"><strong>Access denied.</strong></div></section>
+  if (!user?.menuPermissions?.users) return <section className="site-container page-section"><div className="state-card"><strong>Access denied.</strong></div></section>
 
   return <section className="site-container page-section">
     <div className="page-title-row"><div><span className="eyebrow">ACCESS CONTROL</span><h1>Users & permissions</h1><p>Create users, choose exactly what they can do, change permissions later, or disable an account.</p></div></div>
